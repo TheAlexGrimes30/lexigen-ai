@@ -3,13 +3,11 @@ import uvicorn
 from fastapi import FastAPI, Depends
 from sqlalchemy import text
 from backend.db.database import engine, AsyncSession, get_db
-from backend.db.base import Base
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        yield await engine.dispose()
+    yield
+    await engine.dispose()
 
 app = FastAPI( title="LexigenAI",
                description="AI assistant for credit law",
