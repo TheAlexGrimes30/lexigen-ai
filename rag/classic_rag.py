@@ -135,7 +135,7 @@ class Generator:
         print("Loading LLM via llama.cpp...")
 
         base_dir = Path(__file__).resolve().parent.parent
-        model_path = base_dir / "models" / "Phi-3-mini-4k-instruct-q4.gguf"
+        model_path = base_dir / "db_models" / "Phi-3-mini-4k-instruct-q4.gguf"
 
         if not model_path.exists():
             raise FileNotFoundError(f"Модель не найдена: {model_path}")
