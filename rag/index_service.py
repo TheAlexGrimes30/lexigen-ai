@@ -29,4 +29,3 @@ class IndexService:
         self.vector_store.upsert(ids, vectors, payloads)
 
         print(f"[Index] Indexed: {len(chunks)} chunks")
-        
