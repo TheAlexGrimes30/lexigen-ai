@@ -20,4 +20,3 @@ class IngestionService:
         chunks = self.pipeline.run()
         print(f"[Ingestion] Loaded chunks: {len(chunks)}")
         return chunks
-    
