@@ -93,6 +93,40 @@ class QwenClient(BaseLLMClient):
         except Exception as e:
             return f"LLM error: {e}"
 
+class CreditPromptBuilder(BasePromptBuilder):
+
+    def build(self, query: str, context: str) -> str:
+        return f"""
+            Ты — юридический ассистент по кредитному и банковскому праву РФ.
+        
+            ЗАДАЧА:
+            Ответь строго по предоставленному контексту.
+        
+            ПРАВИЛА:
+            - Используй ТОЛЬКО контекст
+            - Не добавляй внешние знания
+            - Если ответа нет → "Нет данных в контексте"
+            - Не повторяй вопрос
+            - Не рассуждай
+        
+            ФОРМАТ ОТВЕТА:
+            Ответ:
+            - пункт 1
+            - пункт 2
+        
+            Источник:
+            - Статья X ГК РФ / ФЗ "О банках и банковской деятельности" / иной НПА
+        
+            КОНТЕКСТ:
+            {context}
+        
+            ВОПРОС:
+            {query}
+        
+            ОТВЕТ:
+            """.strip()
+
+
 class Generator(BaseGenerator):
 
     def __init__(

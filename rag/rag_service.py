@@ -87,4 +87,3 @@ class RAGService:
             result.append(h)
 
         return result
-    
