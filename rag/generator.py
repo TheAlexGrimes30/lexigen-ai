@@ -1,3 +1,4 @@
+import re
 from abc import abstractmethod, ABC
 
 
@@ -27,3 +28,10 @@ class BaseGenerator(ABC):
     @abstractmethod
     def generate(self, query: str, context: str) -> str:
         raise NotImplementedError
+
+class ContextCleaner(BaseContextCleaner):
+
+    def clean_context(self, text: str) -> str:
+        text = re.sub(r"#+", "", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        return text.strip()
