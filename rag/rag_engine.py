@@ -18,8 +18,9 @@ class RAG:
 
     def __init__(self):
         base_path = Path(__file__).resolve()
-        project_root = base_path.parent
+        project_root = base_path.parents[1]
         rag_db_path = project_root / "rag_db"
+        print(rag_db_path)
 
         loader = MarkdownDocumentLoader(str(rag_db_path))
 
@@ -59,7 +60,7 @@ class RAG:
 
         vector_store = VectorStore(
             client=client,
-            collection_name="rag_qwen_collection",
+            collection_name="rag_credit_collection",
             vector_size=embedder.dim
         )
 
@@ -72,10 +73,7 @@ class RAG:
             embedder=embedder
         )
 
-
-        model_path = project_root / "models" / "Qwen3-8B-Q4_K_M.gguf"
-
-        llm = QwenClient(str(model_path))
+        llm = QwenClient()
 
         generator = Generator(
             llm=llm,
@@ -125,12 +123,10 @@ if __name__ == "__main__":
 
     rag = RAG()
 
-
     questions = [
-        "какие цели трудового законодательства",
-        "что регулирует трудовое законодательство",
-        "что такое свобода труда",
-        "какие принципы трудового права",
+        "какие действия может выполнять должник"
+        "можно ли исполнять обязательства с использованием технологий",
+        "кому должно исполняться обязательство"
     ]
 
     for q in questions:
