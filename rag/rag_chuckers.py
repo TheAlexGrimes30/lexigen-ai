@@ -31,3 +31,12 @@ class Sectioner:
             sections.append(current)
 
         return sections
+
+
+class ContextInjector:
+
+    def inject(self, header: str, text: str) -> str:
+        if not header:
+            return text
+
+        return f"[{header}] {text}"
