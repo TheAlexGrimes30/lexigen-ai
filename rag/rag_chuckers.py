@@ -40,3 +40,28 @@ class ContextInjector:
             return text
 
         return f"[{header}] {text}"
+
+
+class ChunkValidator:
+
+    def __init__(self, min_chars: int = 150, min_words: int = 25):
+        self.min_chars = min_chars
+        self.min_words = min_words
+
+    def is_valid(self, text: str) -> bool:
+        text = text.strip()
+
+        if not text:
+            return False
+
+        if len(text) < self.min_chars:
+            return False
+
+        if len(text.split()) < self.min_words:
+            return False
+
+        alpha_ratio = sum(c.isalpha() for c in text) / max(len(text), 1)
+        if alpha_ratio < 0.25:
+            return False
+
+        return True
