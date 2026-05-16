@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Optional, Any, List
+from typing import Optional, Any, List, Dict
 
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Filter, PointStruct, VectorParams, Distance
@@ -47,6 +47,7 @@ class VectorStore:
             ids: List[str],
             vectors: List[List[float]],
             payloads: List[dict],
+            batch_size: int = 64
     ) -> None:
         """
         Добавляет или обновляет точки в векторном хранилище.
@@ -67,33 +68,36 @@ class VectorStore:
             None
         """
 
+        if not ids or not vectors:
+            raise ValueError("[VectorStore] Empty ids or vectors")
+
         points: List[PointStruct] = []
 
         for i, v, p in zip(ids, vectors, payloads):
+
             if not v or len(v) != self.vector_size:
                 continue
-
-            safe_payload = dict(p) if p else {}
-
-            text = safe_payload.get("text") or safe_payload.get("page_content") or ""
-            safe_payload["text"] = text
 
             points.append(
                 PointStruct(
                     id=str(i),
                     vector=v,
-                    payload=safe_payload,
+                    payload=self._normalize_payload(p),
                 )
             )
 
         if not points:
-            return
+            raise ValueError("[VectorStore] No valid points to upsert")
 
-        self.client.upsert(
-            collection_name=self.collection_name,
-            points=points,
-            wait=True,
-        )
+        for i in range(0, len(points), batch_size):
+            batch = points[i:i + batch_size]
+
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=batch,
+                wait=True,
+            )
+
 
     def search(
             self,
@@ -139,10 +143,8 @@ class VectorStore:
             query_filter=query_filter,
         )
 
-        if not result:
-            return []
-
         return result.points if hasattr(result, "points") else result
+
 
     def delete_collection(self) -> None:
         """
@@ -155,3 +157,17 @@ class VectorStore:
 
         if self.client.collection_exists(self.collection_name):
             self.client.delete_collection(self.collection_name)
+
+    def _normalize_payload(self, p: Optional[Dict]) -> Dict:
+
+        p = p or {}
+
+        return {
+            "text": p.get("text", "") or "",
+            "source": p.get("source"),
+            "file": p.get("file"),
+            "header": p.get("header"),
+            "level": p.get("level"),
+            "article_number": p.get("article_number"),
+            "topics": p.get("topics") or [],
+        }
