@@ -1,13 +1,13 @@
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Dict, Literal, Any
+from typing import List, Dict, Any
 
 
 @dataclass
 class RAGResponse:
     answer: str
     sources: List[Dict]
-    
+
 @dataclass
 class ChunkMetadata:
     source: str
@@ -38,21 +38,27 @@ class Chunk:
     metadata: ChunkMetadata
     chunk_id: str | None = None
 
-    def __post_init__(self) -> None:
+    def __post_init__(self):
+        if not self.text:
+            return
+
         if not self.chunk_id:
-            key = self.metadata.source + self.text[:512]
+            key = "|".join([
+                self.metadata.source or "",
+                self.metadata.file or "",
+                str(self.metadata.article_number or ""),
+                str(self.metadata.header or ""),
+                self.text[:400]
+            ])
+
             self.chunk_id = str(uuid.uuid5(uuid.NAMESPACE_URL, key))
 
-    def to_payload(self) -> Dict[str, Any]:
-        """
-        Преобразует metadata → payload для Qdrant
-        """
 
+    def to_payload(self) -> Dict[str, Any]:
         return {
             "text": self.text,
             "source": self.metadata.source,
             "file": self.metadata.file,
-            "chunk_type": self.metadata.chunk_type,
             "header": self.metadata.header,
             "level": self.metadata.level,
             "article_number": self.metadata.article_number,
