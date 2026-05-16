@@ -53,6 +53,7 @@ class SearchResult:
 
         return QdrantMapper.map(point)
 
+
     @classmethod
     def from_rerank(cls, base: "SearchResult", score: float) -> "SearchResult":
         """
@@ -84,7 +85,6 @@ class QdrantMapper:
             id=str(point.id) if point.id else None,
             source="qdrant",
         )
-
 
 class RerankMapper:
     """
