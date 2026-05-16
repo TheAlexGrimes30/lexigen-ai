@@ -159,10 +159,12 @@ class Generator(BaseGenerator):
 
         text = re.sub(r"Вот ответ:?", "", text, flags=re.IGNORECASE)
 
-        text = re.split(r"(Источник:)", text, maxsplit=1)
+        parts = re.split(r"(Источник:)", text, maxsplit=1)
 
-        if len(text) >= 3:
-            text = text[0] + text[1] + text[2]
+        if len(parts) == 3:
+            text = parts[0] + parts[1] + parts[2]
+        else:
+            text = parts[0]
 
         text = re.sub(r"\n{3,}", "\n\n", text)
 
@@ -170,3 +172,4 @@ class Generator(BaseGenerator):
             text += "\n\nИсточник:\n-"
 
         return text.strip()
+
