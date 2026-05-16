@@ -54,22 +54,6 @@ class SearchResult:
         return QdrantMapper.map(point)
 
     @classmethod
-    def from_bm25(cls, text: str, score: float, payload: Dict[str, Any] | None = None) -> "SearchResult":
-        """
-        Создание результата из BM25.
-
-        Args:
-            text (str): Текст документа
-            score (float): BM25 score
-            payload (Optional[Dict[str, Any]]): Метаданные
-
-        Returns:
-            SearchResult: Унифицированный результат
-        """
-
-        return BM25Mapper.map(text, score, payload)
-
-    @classmethod
     def from_rerank(cls, base: "SearchResult", score: float) -> "SearchResult":
         """
         Создание результата после reranking.
@@ -101,25 +85,6 @@ class QdrantMapper:
             source="qdrant",
         )
 
-
-class BM25Mapper:
-    """
-    Преобразует результат BM25 → SearchResult
-    """
-
-    @classmethod
-    def map(
-        cls,
-        text: str,
-        score: float,
-        payload: Dict[str, Any] | None = None
-    ) -> SearchResult:
-        return SearchResult(
-            text=text or "",
-            score=float(score),
-            payload=payload or {},
-            source="bm25",
-        )
 
 class RerankMapper:
     """
