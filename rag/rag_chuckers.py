@@ -231,4 +231,3 @@ class HybridLegalChunker:
 
         sections = self.sectioner.extract_sections(body)
         return self.create_chunks(sections, frontmatter, filepath)
-    
