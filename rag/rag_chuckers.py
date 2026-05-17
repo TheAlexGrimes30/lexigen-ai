@@ -1,5 +1,6 @@
 import hashlib
 import re
+import json
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -7,7 +8,6 @@ from rag.rag_config import Chunk, ChunkMetadata
 
 
 class Sectioner:
-
     def extract_sections(self, text: str) -> list[dict]:
         sections = []
         current = {"header": None, "level": 0, "content": []}
@@ -39,7 +39,6 @@ class Sectioner:
 
 
 class ContextInjector:
-
     def inject(self, header: str, text: str) -> str:
         if not header:
             return text
@@ -47,8 +46,7 @@ class ContextInjector:
 
 
 class ChunkValidator:
-
-    def __init__(self, min_chars: int = 150, min_words: int = 25):
+    def __init__(self, min_chars: int = 120, min_words: int = 20):
         self.min_chars = min_chars
         self.min_words = min_words
 
@@ -65,15 +63,11 @@ class ChunkValidator:
             return False
 
         alpha_ratio = sum(c.isalpha() for c in text) / max(len(text), 1)
-        if alpha_ratio < 0.25:
-            return False
-
-        return True
+        return alpha_ratio >= 0.25
 
 
 class SemanticMerger:
-
-    def __init__(self, max_size: int = 900):
+    def __init__(self, max_size: int = 850):
         self.max_size = max_size
 
     def _is_list(self, text: str) -> bool:
@@ -100,11 +94,6 @@ class SemanticMerger:
                 buffer = chunk
                 continue
 
-            if buffer.endswith(".") and len(chunk) > 180:
-                merged.append(buffer)
-                buffer = chunk
-                continue
-
             if len(buffer) + len(chunk) <= self.max_size:
                 buffer += " " + chunk
             else:
@@ -118,8 +107,7 @@ class SemanticMerger:
 
 
 class HybridLegalChunker:
-
-    def __init__(self, chunk_size=800, chunk_overlap=40):
+    def __init__(self, chunk_size=750, chunk_overlap=0):
 
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
@@ -136,32 +124,35 @@ class HybridLegalChunker:
 
 
     def _clean_markdown(self, text: str) -> str:
-
         text = re.sub(r"\n?---+\n?", "\n", text)
         text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
         text = re.sub(r"`+", "", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
-
         return text.strip()
 
     def _list_to_prose(self, text: str) -> str:
-
-        if "\n-" in text or "\n•" in text or "\n*" in text:
-            text = re.sub(r"\n\s*[-•*]\s*", ", ", text)
-            text = re.sub(r",\s*,", ",", text)
-
+        # превращаем списки в нормальный текст
+        text = re.sub(r"\n\s*[-•*]\s+", ", ", text)
+        text = re.sub(r",\s*,+", ", ", text)
         return text
+
+    def _fix_punctuation(self, text: str) -> str:
+        text = re.sub(r"[;,]\s*", ", ", text)
+        text = re.sub(r"\s+", " ", text)
+        text = re.sub(r"\s+,", ",", text)
+        text = re.sub(r",\s+", ", ", text)
+        text = re.sub(r",\s*,+", ", ", text)
+        return text.strip()
 
 
     def _extract_article(self, header, frontmatter):
-
         if header:
-            m = re.search(r'Статья\s+(\d+)', header)
+            m = re.search(r"Статья\s+(\d+)", header)
             if m:
                 return m.group(1)
 
         doc_id = frontmatter.get("id", "")
-        m = re.search(r'article_(\d+)', doc_id)
+        m = re.search(r"article_(\d+)", doc_id)
         if m:
             return m.group(1)
 
@@ -170,7 +161,6 @@ class HybridLegalChunker:
     def _make_chunk_id(self, text: str, filepath: str, index: int) -> str:
         raw = f"{filepath}:{index}:{text[:200]}"
         return hashlib.md5(raw.encode("utf-8")).hexdigest()
-
 
     def build_metadata(
         self,
@@ -181,7 +171,6 @@ class HybridLegalChunker:
         article_number,
         chunk_index
     ):
-
         return ChunkMetadata(
             source=frontmatter.get("source", "unknown"),
             file=filepath.split("/")[-1],
@@ -203,6 +192,7 @@ class HybridLegalChunker:
 
         raw_text = self._clean_markdown(raw_text)
         raw_text = self._list_to_prose(raw_text)
+        raw_text = self._fix_punctuation(raw_text)
 
         full_text = self.injector.inject(header, raw_text)
 
@@ -250,15 +240,11 @@ class HybridLegalChunker:
         return chunks
 
     def create_chunks(self, sections, frontmatter, filepath):
-
         all_chunks = []
 
         for sec in sections:
 
-            article_number = self._extract_article(
-                sec["header"],
-                frontmatter
-            )
+            article_number = self._extract_article(sec["header"], frontmatter)
 
             metadata = self.build_metadata(
                 header=sec["header"],
@@ -276,7 +262,6 @@ class HybridLegalChunker:
         return all_chunks
 
     def process(self, filepath: str, frontmatter: dict, body: str):
-
         sections = self.sectioner.extract_sections(body)
         return self.create_chunks(sections, frontmatter, filepath)
 
@@ -285,27 +270,29 @@ class HybridLegalChunker:
         self,
         chunks: list[Chunk],
         limit: int = 10,
-        preview: int = 400
+        preview: int = 400,
+        save_path: str | None = "debug_chunks.json"
     ) -> None:
 
         print("\n" + "=" * 80)
         print(f"DEBUG CHUNKS | TOTAL: {len(chunks)}")
         print("=" * 80)
 
+        export_data = []
+
         for i, chunk in enumerate(chunks[:limit]):
 
-            metadata = chunk.metadata
+            m = chunk.metadata
 
             print(f"\n[CHUNK {i}]")
             print("-" * 80)
-
             print(f"ID: {chunk.chunk_id}")
-            print(f"ARTICLE: {metadata.article_number}")
-            print(f"HEADER: {metadata.header}")
-            print(f"LEVEL: {metadata.level}")
-            print(f"FILE: {metadata.file}")
-            print(f"TOPICS: {metadata.topics}")
-            print(f"CHUNK_INDEX: {metadata.chunk_index}")
+            print(f"ARTICLE: {m.article_number}")
+            print(f"HEADER: {m.header}")
+            print(f"LEVEL: {m.level}")
+            print(f"FILE: {m.file}")
+            print(f"TOPICS: {m.topics}")
+            print(f"CHUNK_INDEX: {m.chunk_index}")
 
             print("\nTEXT:")
             print(chunk.text[:preview])
@@ -314,3 +301,19 @@ class HybridLegalChunker:
                 print("\n...[TRUNCATED]...")
 
             print("\n" + "=" * 80)
+
+            export_data.append({
+                "chunk_id": chunk.chunk_id,
+                "article": m.article_number,
+                "header": m.header,
+                "text": chunk.text,
+                "topics": m.topics,
+                "file": m.file,
+                "chunk_index": m.chunk_index
+            })
+
+        if save_path:
+            with open(save_path, "w", encoding="utf-8") as f:
+                json.dump(export_data, f, ensure_ascii=False, indent=2)
+
+            print(f"\n[DEBUG] Saved chunks to: {save_path}")

@@ -1,0 +1,79 @@
+[
+  {
+    "chunk_id": "eafefa72d454f8d9e49320425d82bf59",
+    "article": "307",
+    "header": "Понятие обязательства",
+    "text": "[Понятие обязательства] Обязательство — это гражданско-правовое отношение, в котором:, одно лицо (должник) обязано совершить определённое действие или воздержаться от его совершения,  другое лицо (кредитор) имеет право требовать исполнения этой обязанности.",
+    "topics": [
+      "civil_law",
+      "obligations",
+      "debtor_creditor_relations",
+      "contract_law",
+      "legal_obligations"
+    ],
+    "file": "C:\\MLProjects\\LexigenAI\\rag_db\\civil_codex\\gc_rf_article_307.md",
+    "chunk_index": 0
+  },
+  {
+    "chunk_id": "38a4d880d77df95440a993cf382fb3fd",
+    "article": "307",
+    "header": "Действия должника",
+    "text": "[Действия должника] Обязательство может предусматривать следующие действия должника:, передачу имущества,  выполнение работ,  оказание услуг,  внесение вклада в совместную деятельность,  уплату денежных средств,  воздержание от определённых действий.",
+    "topics": [
+      "civil_law",
+      "obligations",
+      "debtor_creditor_relations",
+      "contract_law",
+      "legal_obligations"
+    ],
+    "file": "C:\\MLProjects\\LexigenAI\\rag_db\\civil_codex\\gc_rf_article_307.md",
+    "chunk_index": 1
+  },
+  {
+    "chunk_id": "d33ad381fa6b557a695ef192a566a44f",
+    "article": "307",
+    "header": "Основания возникновения обязательств",
+    "text": "[Основания возникновения обязательств] Обязательства возникают на основании:, договоров и иных сделок,  причинения вреда (деликтных обязательств),  неосновательного обогащения,  иных оснований, предусмотренных ГК РФ.",
+    "topics": [
+      "civil_law",
+      "obligations",
+      "debtor_creditor_relations",
+      "contract_law",
+      "legal_obligations"
+    ],
+    "file": "C:\\MLProjects\\LexigenAI\\rag_db\\civil_codex\\gc_rf_article_307.md",
+    "chunk_index": 2
+  },
+  {
+    "chunk_id": "a4d6dc0b171f9ab1b6858385ccc48d53",
+    "article": "307",
+    "header": "Обязанности сторон в рамках добросовестности",
+    "text": "[Обязанности сторон в рамках добросовестности] Стороны должны:, учитывать права и законные интересы друг друга,  оказывать необходимое содействие для исполнения обязательства,  предоставлять необходимую информацию.",
+    "topics": [
+      "civil_law",
+      "obligations",
+      "debtor_creditor_relations",
+      "contract_law",
+      "legal_obligations"
+    ],
+    "file": "C:\\MLProjects\\LexigenAI\\rag_db\\civil_codex\\gc_rf_article_307.md",
+    "chunk_index": 3
+  },
+  {
+    "chunk_id": "0b0c02b3c230df49bad7d6d224099bfa",
+    "article": "307",
+    "header": "Общий принцип применения",
+    "text": "[Общий принцип применения] Общие положения об обязательствах применяются ко всем видам обязательств, если иное не установлено:, специальными нормами Гражданского кодекса РФ,  иными федеральными законами,  существом соответствующих правоотношений.",
+    "topics": [
+      "civil_law",
+      "obligations",
+      "contract_law",
+      "tort",
+      "unjust_enrichment",
+      "corporate_relations",
+      "invalid_transactions"
+    ],
+    "file": "C:\\MLProjects\\LexigenAI\\rag_db\\civil_codex\\gc_rf_article_307_1.md",
+    "chunk_index": 4
+  }
+]
