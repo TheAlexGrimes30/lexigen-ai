@@ -28,21 +28,31 @@ class RAG:
 
     def __init__(self):
 
+        DEBUG_CHUNKS = True
+
         base_path = Path(__file__).resolve()
+
         project_root = base_path.parents[1]
 
         rag_db_path = project_root / "rag_db"
 
-        loader = MarkdownDocumentLoader(str(rag_db_path))
+        loader = MarkdownDocumentLoader(
+            str(rag_db_path)
+        )
 
-        parser = HybridLegalChunker()
+        parser = HybridLegalChunker(
+            chunk_size=800,
+            chunk_overlap=120
+        )
 
         pipeline = IngestionPipeline(
             loader=loader,
             chunker=parser
         )
 
-        self.ingestion = IngestionService(pipeline)
+        self.ingestion = IngestionService(
+            pipeline
+        )
 
         embedder = Embedder(
             model_name="Qwen/Qwen3-Embedding-0.6B"
@@ -90,36 +100,44 @@ class RAG:
             generator=generator
         )
 
-        print("Running ingestion...")
+        print("\nRunning ingestion...")
 
         self.chunks = self.ingestion.load_chunks()
 
         print(f"\n[DEBUG] Total chunks: {len(self.chunks)}")
 
-        for c in self.chunks[:10]:
-            print(
-                c.metadata.article_number,
-                "|",
-                c.metadata.header
+        if DEBUG_CHUNKS:
+
+            parser.debug_chunks(
+                chunks=self.chunks,
+                limit=5,
+                preview=700
             )
 
-        print("\nIndexing...")
+        print("\nIndexing chunks into Qdrant...")
 
-        self.index_service.index(self.chunks)
+        self.index_service.index(
+            self.chunks
+        )
 
-        print("RAG initialized.")
+        print("\nRAG initialized successfully.")
 
     def ask(self, query: str) -> RAGResponse:
+
         return self.rag_service.ask(query)
 
     def close(self):
 
-        print("Shutting down RAG...")
+        print("\nShutting down RAG...")
 
         try:
+
             self.client.close()
 
+            print("[INFO] Qdrant client closed.")
+
         except Exception as e:
+
             print(
                 "[WARN] Qdrant close error:",
                 repr(e)
@@ -138,12 +156,21 @@ if __name__ == "__main__":
 
         for q in questions:
 
-            print("\nQ:", q)
+            print("\n" + "=" * 80)
+
+            print("QUESTION:")
+            print(q)
+
+            print("=" * 80)
 
             res = rag.ask(q)
 
-            print("\nA:")
+            print("\nANSWER:")
             print(res.answer)
 
+            print("\nSOURCES:")
+            print(res.sources)
+
     finally:
+
         rag.close()

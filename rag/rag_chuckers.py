@@ -231,3 +231,44 @@ class HybridLegalChunker:
 
         sections = self.sectioner.extract_sections(body)
         return self.create_chunks(sections, frontmatter, filepath)
+
+    def debug_chunks(
+            self,
+            chunks: list[Chunk],
+            limit: int = 10,
+            preview: int = 400
+    ) -> None:
+
+        print("\n" + "=" * 80)
+        print(f"DEBUG CHUNKS | TOTAL: {len(chunks)}")
+        print("=" * 80)
+
+        for i, chunk in enumerate(chunks[:limit]):
+
+            metadata = chunk.metadata
+
+            print(f"\n[CHUNK {i}]")
+            print("-" * 80)
+
+            print(f"ID: {chunk.chunk_id}")
+
+            print(f"ARTICLE: {metadata.article_number}")
+
+            print(f"HEADER: {metadata.header}")
+
+            print(f"LEVEL: {metadata.level}")
+
+            print(f"FILE: {metadata.file}")
+
+            print(f"TOPICS: {metadata.topics}")
+
+            print(f"CHUNK_INDEX: {metadata.chunk_index}")
+
+            print("\nTEXT:")
+            print(chunk.text[:preview])
+
+            if len(chunk.text) > preview:
+                print("\n...[TRUNCATED]...")
+
+            print("\n" + "=" * 80)
+
