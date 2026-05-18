@@ -6,6 +6,14 @@ from typing import List, Dict, Any
 
 @dataclass
 class RAGResponse:
+    """
+    Response object returned by RAG pipeline.
+
+    Attributes:
+        answer (str): Generated answer from LLM.
+        sources (List[Dict]): Retrieved source chunks with metadata.
+    """
+
     answer: str
     sources: List[Dict]
 
