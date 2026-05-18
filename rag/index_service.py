@@ -1,15 +1,9 @@
-from abc import ABC, abstractmethod
 from typing import List
 
 from rag.rag_config import Chunk
 from rag.retriever import Embedder
 from rag.storage import VectorStore
 
-class BaseIndexService(ABC):
-
-    @abstractmethod
-    def index(self, chunks: List[Chunk]) -> None:
-        raise NotImplementedError
 
 class IndexService:
     def __init__(self, vector_store: VectorStore, embedder: Embedder):

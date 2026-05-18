@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from dataclasses import dataclass, field
 from typing import List, Dict, Any
@@ -18,27 +19,14 @@ class ChunkMetadata:
     chunk_index: int | None = None
     topics: List[str] = field(default_factory=list)
 
+
 @dataclass
 class Chunk:
-    """
-    Единица данных (чанк) в RAG-пайплайне.
-
-    Используется на всех этапах:
-    - разбиение документов (chunking)
-    - генерация эмбеддингов
-    - загрузка в векторное хранилище
-
-    Attributes:
-        text (str): Текст чанка
-        metadata (ChunkMetadata): Метаданные
-        chunk_id (str): Уникальный ID (генерируется автоматически, если не задан)
-    """
-
     text: str
     metadata: ChunkMetadata
     chunk_id: str | None = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if not self.text:
             return
 
@@ -64,3 +52,4 @@ class Chunk:
             "article_number": self.metadata.article_number,
             "topics": self.metadata.topics,
         }
+

@@ -1,6 +1,7 @@
-import hashlib
 from abc import ABC, abstractmethod
 from functools import lru_cache
+from typing import List, Set
+import hashlib
 
 from sentence_transformers import SentenceTransformer
 
@@ -12,9 +13,9 @@ class BaseDenseRetriever(ABC):
     @abstractmethod
     def search(
         self,
-        query_vec: list[float],
+        query_vec: List[float],
         k: int
-    ) -> list[SearchResult]:
+    ) -> List[SearchResult]:
         raise NotImplementedError
 
 
@@ -25,7 +26,7 @@ class BaseRetriever(ABC):
         self,
         query: str,
         top_k: int = 10
-    ) -> list[SearchResult]:
+    ) -> List[SearchResult]:
         raise NotImplementedError
 
 
@@ -55,8 +56,8 @@ class Embedder:
 
     def encode_queries(
         self,
-        texts: list[str]
-    ) -> list[list[float]]:
+        texts: List[str]
+    ) -> List[List[float]]:
 
         texts = self._apply_prefix(
             texts,
@@ -67,8 +68,8 @@ class Embedder:
 
     def encode_passages(
         self,
-        texts: list[str]
-    ) -> list[list[float]]:
+        texts: List[str]
+    ) -> List[List[float]]:
 
         texts = self._apply_prefix(
             texts,
@@ -79,9 +80,9 @@ class Embedder:
 
     def _apply_prefix(
         self,
-        texts: list[str],
+        texts: List[str],
         is_query: bool
-    ) -> list[str]:
+    ) -> List[str]:
 
         if "e5" not in self.model_name.lower():
             return texts
@@ -99,8 +100,8 @@ class Embedder:
 
     def _encode(
         self,
-        texts: list[str]
-    ) -> list[list[float]]:
+        texts: List[str]
+    ) -> List[List[float]]:
 
         vectors = self._model.encode(
             texts,
@@ -120,9 +121,9 @@ class QdrantDenseRetriever(BaseDenseRetriever):
 
     def search(
         self,
-        query_vec: list[float],
+        query_vec: List[float],
         k: int
-    ) -> list[SearchResult]:
+    ) -> List[SearchResult]:
 
         hits = self.vector_store.search(
             query_vector=query_vec,
@@ -168,7 +169,7 @@ class Retriever(BaseRetriever):
         self,
         query: str,
         top_k: int = 10
-    ) -> list[SearchResult]:
+    ) -> List[SearchResult]:
 
         query = (query or "").strip()
 
@@ -197,12 +198,12 @@ class Retriever(BaseRetriever):
 
     def _basic_filter(
         self,
-        hits: list[SearchResult]
-    ) -> list[SearchResult]:
+        hits: List[SearchResult]
+    ) -> List[SearchResult]:
 
-        seen: set[str] = set()
+        seen: Set[str] = set()
 
-        result: list[SearchResult] = []
+        result: List[SearchResult] = []
 
         for h in hits:
 

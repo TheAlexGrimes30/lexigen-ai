@@ -1,22 +1,19 @@
 from dataclasses import dataclass
-from typing import Optional, Any, List, Dict
+from typing import List, Optional, Any, Dict
 
 from qdrant_client import QdrantClient
-from qdrant_client.http.models import Filter, PointStruct, VectorParams, Distance
+from qdrant_client.http.models import (
+    Distance,
+    VectorParams,
+    PointStruct,
+    Filter,
+)
 
 
 @dataclass
 class VectorStore:
     """
-    Абстракция над векторным хранилищем (Qdrant).
-
-    Отвечает за:
-    - создание коллекции
-    - вставку (upsert) векторов
-    - поиск по векторам
-    - удаление коллекции
-
-    Позволяет изолировать бизнес-логику RAG от конкретной реализации базы.
+    Абстракция над Qdrant vector store.
     """
 
     client: QdrantClient
@@ -24,14 +21,8 @@ class VectorStore:
     vector_size: int
     distance: Distance = Distance.COSINE
 
-    def ensure_collection(self) -> None:
-        """
-        Проверяет наличие коллекции и создаёт её при отсутствии.
 
-        Поведение:
-            - если коллекция уже существует → ничего не делает
-            - если нет → создаёт новую с заданными параметрами
-        """
+    def ensure_collection(self) -> None:
 
         if not self.client.collection_exists(self.collection_name):
             self.client.create_collection(
@@ -42,31 +33,14 @@ class VectorStore:
                 ),
             )
 
+
     def upsert(
-            self,
-            ids: List[str],
-            vectors: List[List[float]],
-            payloads: List[dict],
-            batch_size: int = 64
+        self,
+        ids: List[str],
+        vectors: List[List[float]],
+        payloads: List[dict],
+        batch_size: int = 64,
     ) -> None:
-        """
-        Добавляет или обновляет точки в векторном хранилище.
-
-        Вход:
-            ids (List[str]):
-                Список уникальных идентификаторов точек
-
-            vectors (List[List[float]]):
-                Список векторов (эмбеддингов)
-                Размер каждого вектора должен совпадать с vector_size
-
-            payloads (List[dict]):
-                Список метаданных для каждой точки
-                (например: text, source, дополнительные поля)
-
-        Выход:
-            None
-        """
 
         if not ids or not vectors:
             raise ValueError("[VectorStore] Empty ids or vectors")
@@ -100,37 +74,11 @@ class VectorStore:
 
 
     def search(
-            self,
-            query_vector: List[float],
-            limit: int = 10,
-            query_filter: Optional[Filter] = None,
+        self,
+        query_vector: List[float],
+        limit: int = 10,
+        query_filter: Optional[Filter] = None,
     ) -> List[Any]:
-        """
-        Выполняет поиск ближайших векторов в коллекции.
-
-        Вход:
-            query_vector (List[float]):
-                Вектор запроса (embedding)
-
-            limit (int):
-                Максимальное количество возвращаемых результатов
-
-            query_filter (Optional[Filter]):
-                Фильтр Qdrant для ограничения поиска
-                (например: по source, тегам и т.д.)
-
-        Выход:
-            List[Any]:
-                Список найденных объектов (ScoredPoint из Qdrant),
-                содержащих:
-                - id
-                - score (релевантность)
-                - payload (метаданные)
-
-        Примечание:
-            Возвращаемый тип оставлен как Any,
-            чтобы не привязываться жёстко к Qdrant API.
-        """
 
         if not query_vector:
             return []
@@ -147,16 +95,10 @@ class VectorStore:
 
 
     def delete_collection(self) -> None:
-        """
-        Удаляет коллекцию из Qdrant (если существует).
-
-        Используется:
-            - при очистке базы
-            - при переинициализации индекса
-        """
 
         if self.client.collection_exists(self.collection_name):
             self.client.delete_collection(self.collection_name)
+
 
     def _normalize_payload(self, p: Optional[Dict]) -> Dict:
 

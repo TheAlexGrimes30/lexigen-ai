@@ -1,7 +1,11 @@
-import math
-import re
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from functools import lru_cache
+from typing import List, Tuple
+
+import math
+import re
 
 from sentence_transformers import CrossEncoder
 
@@ -12,37 +16,37 @@ class BaseReranker(ABC):
 
     @abstractmethod
     def rerank(
-            self,
-            query: str,
-            hits: list["SearchResult"],
-            *,
-            top_n: int
-    ) -> list["SearchResult"]:
+        self,
+        query: str,
+        hits: List["SearchResult"],
+        *,
+        top_n: int
+    ) -> List["SearchResult"]:
         raise NotImplementedError
 
 
 class Reranker(BaseReranker):
 
     def __init__(
-            self,
-            model_name: str = "Qwen/Qwen3-Reranker-0.6B",
-            batch_size: int = 8,
-            max_length: int = 512,
-            top_n: int = 5,
+        self,
+        model_name: str = "Qwen/Qwen3-Reranker-0.6B",
+        batch_size: int = 8,
+        max_length: int = 512,
+        top_n: int = 5,
 
-            rerank_weight: float = 0.85,
-            dense_weight: float = 0.10,
-            lexical_weight: float = 0.05,
+        rerank_weight: float = 0.85,
+        dense_weight: float = 0.10,
+        lexical_weight: float = 0.05,
 
-            min_score: float = 0.45,
-            relative_threshold: float = 0.75,
+        min_score: float = 0.45,
+        relative_threshold: float = 0.75,
 
-            exact_header_boost: float = 0.20,
-            partial_header_boost: float = 0.10,
-            generic_header_penalty: float = 0.04,
-            low_lexical_penalty: float = 0.03,
+        exact_header_boost: float = 0.20,
+        partial_header_boost: float = 0.10,
+        generic_header_penalty: float = 0.04,
+        low_lexical_penalty: float = 0.03,
 
-            max_chunks_per_article: int = 2,
+        max_chunks_per_article: int = 2,
     ):
 
         self.model = self._load(
@@ -69,11 +73,12 @@ class Reranker(BaseReranker):
 
         self.max_chunks_per_article = max_chunks_per_article
 
+
     @staticmethod
     @lru_cache(maxsize=1)
     def _load(
-            model_name: str,
-            max_length: int
+        model_name: str,
+        max_length: int
     ) -> CrossEncoder:
 
         model = CrossEncoder(
@@ -92,12 +97,13 @@ class Reranker(BaseReranker):
 
         return model
 
+
     def rerank(
-            self,
-            query: str,
-            hits: list[SearchResult],
-            top_n: int | None = None
-    ) -> list[SearchResult]:
+        self,
+        query: str,
+        hits: List[SearchResult],
+        top_n: int | None = None
+    ) -> List[SearchResult]:
 
         if not hits:
             return []
@@ -144,6 +150,7 @@ class Reranker(BaseReranker):
         reranked = []
 
         for hit, raw_score in zip(valid_hits, raw_scores):
+
             rerank_score = self._normalize_logit(
                 raw_score
             )
@@ -176,11 +183,11 @@ class Reranker(BaseReranker):
             )
 
             final_score = (
-                    self.rerank_weight * rerank_score +
-                    self.dense_weight * dense_score +
-                    self.lexical_weight * lexical_score +
-                    header_score -
-                    penalty
+                self.rerank_weight * rerank_score +
+                self.dense_weight * dense_score +
+                self.lexical_weight * lexical_score +
+                header_score -
+                penalty
             )
 
             reranked.append(
@@ -207,10 +214,10 @@ class Reranker(BaseReranker):
         return reranked[:top_n]
 
     def _build_pair(
-            self,
-            query: str,
-            doc: SearchResult
-    ) -> tuple[str, str]:
+        self,
+        query: str,
+        doc: SearchResult
+    ) -> Tuple[str, str]:
 
         payload = doc.payload or {}
 
@@ -230,10 +237,10 @@ class Reranker(BaseReranker):
 
         enriched_doc = f"""
         Статья: {article}
-
+        
         Заголовок:
         {header}
-
+        
         Текст:
         {text}
         """.strip()
@@ -244,8 +251,8 @@ class Reranker(BaseReranker):
         )
 
     def _prepare_text(
-            self,
-            text: str
+        self,
+        text: str
     ) -> str:
 
         text = (text or "").strip()
@@ -267,19 +274,19 @@ class Reranker(BaseReranker):
         )
 
     def _normalize_logit(
-            self,
-            score: float
+        self,
+        score: float
     ) -> float:
 
         score = float(score)
 
         return 1 / (
-                1 + math.exp(-score)
+            1 + math.exp(-score)
         )
 
     def _normalize_dense(
-            self,
-            score: float
+        self,
+        score: float
     ) -> float:
 
         score = float(score)
@@ -290,9 +297,9 @@ class Reranker(BaseReranker):
         )
 
     def _tokenize(
-            self,
-            text: str
-    ) -> list[str]:
+        self,
+        text: str
+    ) -> List[str]:
 
         words = re.findall(
             r"\w+",
@@ -305,10 +312,11 @@ class Reranker(BaseReranker):
         ]
 
     def _lexical_score(
-            self,
-            query: str,
-            text: str
+        self,
+        query: str,
+        text: str
     ) -> float:
+
 
         text = text[:300]
 
@@ -324,18 +332,18 @@ class Reranker(BaseReranker):
             return 0.0
 
         overlap = (
-                query_words & text_words
+            query_words & text_words
         )
 
         return (
-                len(overlap) /
-                len(query_words)
+            len(overlap) /
+            len(query_words)
         )
 
     def _header_score(
-            self,
-            query: str,
-            header: str
+        self,
+        query: str,
+        header: str
     ) -> float:
 
         q = query.lower().strip()
@@ -363,27 +371,27 @@ class Reranker(BaseReranker):
             return 0.0
 
         overlap = (
-                query_words & header_words
+            query_words & header_words
         )
 
         ratio = (
-                len(overlap) /
-                len(query_words)
+            len(overlap) /
+            len(query_words)
         )
 
         return ratio * 0.08
 
     def _penalty_score(
-            self,
-            query: str,
-            header: str,
-            text: str
+        self,
+        query: str,
+        header: str,
+        text: str
     ) -> float:
 
         penalty = 0.0
 
         header_lower = (
-                header or ""
+            header or ""
         ).lower().strip()
 
         generic_headers = {
@@ -412,9 +420,9 @@ class Reranker(BaseReranker):
         return penalty
 
     def _dynamic_filter(
-            self,
-            hits: list[SearchResult]
-    ) -> list[SearchResult]:
+        self,
+        hits: List[SearchResult]
+    ) -> List[SearchResult]:
 
         if not hits:
             return []
@@ -437,10 +445,10 @@ class Reranker(BaseReranker):
         return filtered
 
     def _diversify(
-            self,
-            hits: list[SearchResult],
-            top_n: int
-    ) -> list[SearchResult]:
+        self,
+        hits: List[SearchResult],
+        top_n: int
+    ) -> List[SearchResult]:
 
         selected = []
 
@@ -473,10 +481,10 @@ class Reranker(BaseReranker):
         return selected
 
     def debug_rerank(
-            self,
-            query: str,
-            hits: list[SearchResult],
-            top_n: int = 10
+        self,
+        query: str,
+        hits: List[SearchResult],
+        top_n: int = 10
     ):
 
         print("\n" + "=" * 100)
@@ -522,9 +530,10 @@ class Reranker(BaseReranker):
         scored = []
 
         for hit, raw_score in zip(
-                valid_hits,
-                raw_scores
+            valid_hits,
+            raw_scores
         ):
+
             rerank_score = self._normalize_logit(
                 raw_score
             )
@@ -557,11 +566,11 @@ class Reranker(BaseReranker):
             )
 
             final_score = (
-                    self.rerank_weight * rerank_score +
-                    self.dense_weight * dense_score +
-                    self.lexical_weight * lexical_score +
-                    header_score -
-                    penalty
+                self.rerank_weight * rerank_score +
+                self.dense_weight * dense_score +
+                self.lexical_weight * lexical_score +
+                header_score -
+                penalty
             )
 
             scored.append(
@@ -582,14 +591,15 @@ class Reranker(BaseReranker):
         )
 
         for idx, (
-                hit,
-                rerank_score,
-                dense_score,
-                lexical_score,
-                header_score,
-                penalty,
-                final_score
+            hit,
+            rerank_score,
+            dense_score,
+            lexical_score,
+            header_score,
+            penalty,
+            final_score
         ) in enumerate(scored[:top_n], start=1):
+
             payload = hit.payload or {}
 
             article = payload.get(

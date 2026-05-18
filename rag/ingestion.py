@@ -1,6 +1,7 @@
 import re
 from abc import abstractmethod, ABC
 from pathlib import Path
+from typing import List, Tuple, Dict
 
 import yaml
 from langchain_core.documents import Document
@@ -11,7 +12,7 @@ from rag.rag_config import Chunk
 class BaseDocumentLoader(ABC):
 
     @abstractmethod
-    def load(self) -> list[Document]:
+    def load(self) -> List[Document]:
         raise NotImplementedError
 
 class MarkdownDocumentLoader:
@@ -21,7 +22,7 @@ class MarkdownDocumentLoader:
     def load(self) -> list[Path]:
         return list(self.data_dir.rglob("*.md"))
 
-    def parse_file(self, path: str) -> tuple[dict, str]:
+    def parse_file(self, path: str) -> Tuple[Dict, str]:
         text = Path(path).read_text(encoding="utf-8")
 
         match = re.match(r'^---\n(.*?)\n---\n(.*)$', text, re.DOTALL)
@@ -40,7 +41,7 @@ class IngestionPipeline:
         self.loader = loader
         self.chunker = chunker
 
-    def run(self) -> list[Chunk]:
+    def run(self) -> List[Chunk]:
         chunks = []
 
         for path in self.loader.load():
@@ -61,7 +62,7 @@ class IngestionService:
     def __init__(self, pipeline: IngestionPipeline):
         self.pipeline = pipeline
 
-    def load_chunks(self) -> list[Chunk]:
+    def load_chunks(self) -> List[Chunk]:
         chunks = self.pipeline.run()
         print(f"[Ingestion] Loaded chunks: {len(chunks)}")
         return chunks

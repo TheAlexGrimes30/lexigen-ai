@@ -1,4 +1,5 @@
 import re
+from typing import List, Set
 
 from rag.rag_config import RAGResponse
 from rag.search_result import SearchResult
@@ -62,10 +63,10 @@ class RAGService:
         text = re.sub(r"\bНедостаточно данных\b.*", "", text, flags=re.IGNORECASE)
         return text.strip()
 
-    def _filter_hits(self, hits: list[SearchResult]) -> list[SearchResult]:
+    def _filter_hits(self, hits: List[SearchResult]) -> List[SearchResult]:
 
         filtered = []
-        seen: set[tuple] = set()
+        seen: Set[tuple] = set()
 
         for h in hits:
 
@@ -91,7 +92,7 @@ class RAGService:
 
         return filtered
 
-    def _build_context(self, hits: list[SearchResult]) -> str:
+    def _build_context(self, hits: List[SearchResult]) -> str:
 
         parts = []
         size = 0
@@ -127,7 +128,7 @@ class RAGService:
 
         return "\n\n".join(parts)
 
-    def _fallback_context(self, hits: list[SearchResult]) -> str:
+    def _fallback_context(self, hits: List[SearchResult]) -> str:
 
         parts = []
 
@@ -184,7 +185,7 @@ class RAGService:
 
         return text
 
-    def _build_sources(self, hits: list[SearchResult]) -> list[str]:
+    def _build_sources(self, hits: List[SearchResult]) -> List[str]:
 
         seen = set()
         out = []

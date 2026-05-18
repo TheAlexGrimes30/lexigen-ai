@@ -1,8 +1,8 @@
 import re
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List
 
-import requests
+from llama_cpp import Llama
 
 from rag.search_result import SearchResult
 
@@ -32,10 +32,10 @@ class BaseGenerator(ABC):
 
     @abstractmethod
     def generate(
-        self,
-        query: str,
-        context: str,
-        hits: Optional[List[SearchResult]] = None
+            self,
+            query: str,
+            context: str,
+            hits: List[SearchResult]
     ) -> str:
         raise NotImplementedError
 
@@ -43,10 +43,8 @@ class BaseGenerator(ABC):
 class ContextCleaner(BaseContextCleaner):
 
     def clean_context(self, text: str) -> str:
-
         text = re.sub(r"#+", "", text)
         text = re.sub(r"\*+", "", text)
-
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]+", " ", text)
 
@@ -55,161 +53,154 @@ class ContextCleaner(BaseContextCleaner):
 
 class QwenClient(BaseLLMClient):
 
-    def __init__(
-        self,
-        url: str = "http://localhost:11434",
-        model: str = "qwen2.5:3b",
-        timeout: int = 120,
-    ):
-
-        self.url = url.rstrip("/")
-        self.model = model
-        self.timeout = timeout
-
-        self.options = {
-            "temperature": 0.0,
-            "top_p": 0.8,
-            "top_k": 40,
-            "repeat_penalty": 1.15,
-            "num_predict": 200,
-            "num_ctx": 4096,
-            "num_thread": 8,
-        }
-
-        self.stop_tokens = [
-            "\n\n\n",
-            "Контекст:",
-            "Вопрос:",
-        ]
+    def __init__(self, model_path: str):
+        self.llm = Llama(
+            model_path=str(model_path),
+            n_ctx=4096,
+            n_threads=8,
+            verbose=False
+        )
 
     def generate(self, prompt: str) -> str:
-
-        try:
-
-            response = requests.post(
-                f"{self.url}/api/chat",
-                json={
-                    "model": self.model,
-                    "stream": False,
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": (
-                                "Ты юридический ассистент РФ. "
-                                "Отвечай строго по контексту. "
-                                "Без рассуждений."
-                            )
-                        },
-                        {
-                            "role": "user",
-                            "content": prompt
-                        }
-                    ],
-                    "options": self.options,
+        output = self.llm.create_chat_completion(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Ты юридический ассистент по Трудовому кодексу РФ.\n"
+                        "Отвечай строго одним абзацем.\n"
+                        "Запрещено:\n"
+                        "- списки\n"
+                        "- reasoning\n"
+                        "- объяснения\n"
+                        "- рассуждения\n"
+                        "- английские служебные фразы (A:, Okay, Let's)\n"
+                        "- любые шаги решения\n"
+                        "Верни только финальный юридический ответ."
+                    )
                 },
-                timeout=self.timeout,
-            )
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
 
-            response.raise_for_status()
+            temperature=0.3,
+            top_p=0.8,
+            repeat_penalty=1.1,
+            max_tokens=200,
 
-            answer = response.json()["message"]["content"].strip()
+            stop=[
+                "A:",
+                "Answer:",
+                "Okay",
+                "Let's",
+                "Reasoning",
+                "Explanation",
+                "Обоснование",
+                "Анализ"
+            ]
+        )
 
-            for token in self.stop_tokens:
-                if token in answer:
-                    answer = answer.split(token)[0]
+        return output["choices"][0]["message"]["content"].strip()
 
-            answer = re.sub(r"<.*?>", "", answer)
-
-            answer = re.sub(r"\n{3,}", "\n\n", answer)
-
-            return answer.strip()
-
-        except Exception as e:
-            return f"LLM error: {e}"
+    def close(self):
+        self.llm = None
 
 
-class CreditPromptBuilder(BasePromptBuilder):
+class LaborPromptBuilder(BasePromptBuilder):
 
     def build(self, query: str, context: str) -> str:
-
         return f"""
-Ты — юридический ассистент по кредитному и банковскому праву РФ.
+        Ты юридическая система по Кредитному праву РФ.
 
-ЗАДАЧА:
-Ответь строго по предоставленному контексту.
+        =====================
+        ИНСТРУКЦИЯ
+        =====================
 
-ПРАВИЛА:
-- Используй ТОЛЬКО контекст
-- Не добавляй внешние знания
-- Если ответа нет → "Нет данных в контексте"
-- Не повторяй вопрос
-- Не рассуждай
+        Верни только готовый юридический ответ.
 
-ФОРМАТ ОТВЕТА:
-Ответ:
-- пункт 1
-- пункт 2
+        Строго запрещено:
+        - рассуждения
+        - reasoning
+        - анализ
+        - пояснения
+        - chain of thought
+        - описание процесса
+        - служебные фразы
 
-Источник:
-- Статья X ГК РФ / ФЗ "О банках и банковской деятельности"
+        Не используй:
+        - "Нужно ответить"
+        - "Важно"
+        - "Сначала"
+        - "Убеждаюсь"
 
-КОНТЕКСТ:
-{context}
+        Формат ответа:
+        - один связный юридический текст
+        - без списка
+        - без вступления
+        - без пояснений
+        - в конце обязательно укажи источник
 
-ВОПРОС:
-{query}
+        Пример формата:
+        Кредитное законодательство устанавливает ... в соответствии с Гражданским кодексом РФ, статья 307.
 
-ОТВЕТ:
-""".strip()
+        =====================
+        КОНТЕКСТ
+        =====================
+
+        {context}
+
+        =====================
+        ВОПРОС
+        =====================
+
+        {query}
+
+        =====================
+        ФИНАЛЬНЫЙ ОТВЕТ
+        =====================
+        """.strip()
 
 
 class Generator(BaseGenerator):
 
-    def __init__(
-        self,
-        llm: BaseLLMClient,
-        prompt_builder: BasePromptBuilder,
-        cleaner: BaseContextCleaner
-    ):
-
+    def __init__(self, llm, prompt_builder, cleaner):
         self.llm = llm
         self.prompt_builder = prompt_builder
         self.cleaner = cleaner
 
     def generate(
-        self,
-        query: str,
-        context: str,
-        hits: Optional[List[SearchResult]] = None
+            self,
+            query: str,
+            context: str,
+            hits: List[SearchResult]
     ) -> str:
 
-        context = self.cleaner.clean_context(context)
+        context = self.cleaner.clean_context(context or "")
 
-        if not context:
+        if len(context) < 80:
+            context = self._build_fallback_context(hits)
 
-            if hits:
-                context = self._build_fallback_context(hits)
-
-        if not context:
-            return "Ответ:\nНет данных в контексте\n\nИсточник:\n-"
+        if len(context) < 30:
+            return "Недостаточно данных."
 
         prompt = self.prompt_builder.build(query, context)
 
-        raw = self.llm.generate(prompt)
+        try:
+            raw = self.llm.generate(prompt)
+        except Exception:
+            return "Ошибка генерации ответа."
 
         return self._postprocess(raw)
 
-    def _build_fallback_context(
-        self,
-        hits: List[SearchResult]
-    ) -> str:
+    def _build_fallback_context(self, hits: List[SearchResult]) -> str:
 
         parts = []
 
         for h in hits[:5]:
 
             text = (h.text or "").strip()
-
             if len(text) < 20:
                 continue
 
@@ -217,7 +208,7 @@ class Generator(BaseGenerator):
             header = h.payload.get("header", "")
 
             parts.append(
-                f"Статья {article} — {header}\n{text[:500]}"
+                f"Статья {article} — {header}\n{text[:700]}"
             )
 
         return "\n\n".join(parts)
@@ -227,50 +218,27 @@ class Generator(BaseGenerator):
         if not text:
             return "Недостаточно данных."
 
-        text = re.sub(
-            r"КОНЕЦ_ОТВЕТА.*",
-            "",
-            text,
-            flags=re.DOTALL
-        )
+        text = re.sub(r"<.*?>", "", text)
+
+        text = re.sub(r"(?i)^(a|answer|ответ):\s*", "", text)
 
         text = re.sub(
-            r"(?i)^ответ:\s*",
-            "Ответ:\n",
-            text
-        )
-
-        if text.count("Ответ:") > 1:
-            text = "Ответ:" + text.split("Ответ:")[1]
-
-        text = re.sub(
-            r"(?i)вот ответ:?",
+            r"(?i)(нужно ответить|сначала|важно|убеждаюсь|let'?s|okay|i need).*",
             "",
             text
         )
 
-        text = re.sub(
-            r"(?i)(reasoning|analysis|explanation).*",
-            "",
-            text
-        )
-
-        parts = re.split(
-            r"(Источник:)",
-            text,
-            maxsplit=1
-        )
-
-        if len(parts) == 3:
-            text = parts[0] + parts[1] + parts[2]
-        else:
-            text = parts[0]
-
-        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"^\s*[-•*]\s+", "", text, flags=re.MULTILINE)
 
         text = re.sub(r"\s+", " ", text).strip()
 
-        if "Источник:" not in text:
-            text += "\n\nИсточник:\n-"
+        if len(text.split()) < 4:
+            return "Недостаточно данных."
 
-        return text.strip()
+        return text
+
+    def close(self):
+        try:
+            self.llm.close()
+        except Exception:
+            pass
