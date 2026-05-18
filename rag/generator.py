@@ -1,0 +1,276 @@
+import re
+from abc import ABC, abstractmethod
+from typing import List, Optional
+
+import requests
+
+from rag.search_result import SearchResult
+
+
+class BaseLLMClient(ABC):
+
+    @abstractmethod
+    def generate(self, prompt: str) -> str:
+        raise NotImplementedError
+
+
+class BasePromptBuilder(ABC):
+
+    @abstractmethod
+    def build(self, query: str, context: str) -> str:
+        raise NotImplementedError
+
+
+class BaseContextCleaner(ABC):
+
+    @abstractmethod
+    def clean_context(self, text: str) -> str:
+        raise NotImplementedError
+
+
+class BaseGenerator(ABC):
+
+    @abstractmethod
+    def generate(
+        self,
+        query: str,
+        context: str,
+        hits: Optional[List[SearchResult]] = None
+    ) -> str:
+        raise NotImplementedError
+
+
+class ContextCleaner(BaseContextCleaner):
+
+    def clean_context(self, text: str) -> str:
+
+        text = re.sub(r"#+", "", text)
+        text = re.sub(r"\*+", "", text)
+
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]+", " ", text)
+
+        return text.strip()
+
+
+class QwenClient(BaseLLMClient):
+
+    def __init__(
+        self,
+        url: str = "http://localhost:11434",
+        model: str = "qwen2.5:3b",
+        timeout: int = 120,
+    ):
+
+        self.url = url.rstrip("/")
+        self.model = model
+        self.timeout = timeout
+
+        self.options = {
+            "temperature": 0.0,
+            "top_p": 0.8,
+            "top_k": 40,
+            "repeat_penalty": 1.15,
+            "num_predict": 200,
+            "num_ctx": 4096,
+            "num_thread": 8,
+        }
+
+        self.stop_tokens = [
+            "\n\n\n",
+            "Контекст:",
+            "Вопрос:",
+        ]
+
+    def generate(self, prompt: str) -> str:
+
+        try:
+
+            response = requests.post(
+                f"{self.url}/api/chat",
+                json={
+                    "model": self.model,
+                    "stream": False,
+                    "messages": [
+                        {
+                            "role": "system",
+                            "content": (
+                                "Ты юридический ассистент РФ. "
+                                "Отвечай строго по контексту. "
+                                "Без рассуждений."
+                            )
+                        },
+                        {
+                            "role": "user",
+                            "content": prompt
+                        }
+                    ],
+                    "options": self.options,
+                },
+                timeout=self.timeout,
+            )
+
+            response.raise_for_status()
+
+            answer = response.json()["message"]["content"].strip()
+
+            for token in self.stop_tokens:
+                if token in answer:
+                    answer = answer.split(token)[0]
+
+            answer = re.sub(r"<.*?>", "", answer)
+
+            answer = re.sub(r"\n{3,}", "\n\n", answer)
+
+            return answer.strip()
+
+        except Exception as e:
+            return f"LLM error: {e}"
+
+
+class CreditPromptBuilder(BasePromptBuilder):
+
+    def build(self, query: str, context: str) -> str:
+
+        return f"""
+Ты — юридический ассистент по кредитному и банковскому праву РФ.
+
+ЗАДАЧА:
+Ответь строго по предоставленному контексту.
+
+ПРАВИЛА:
+- Используй ТОЛЬКО контекст
+- Не добавляй внешние знания
+- Если ответа нет → "Нет данных в контексте"
+- Не повторяй вопрос
+- Не рассуждай
+
+ФОРМАТ ОТВЕТА:
+Ответ:
+- пункт 1
+- пункт 2
+
+Источник:
+- Статья X ГК РФ / ФЗ "О банках и банковской деятельности"
+
+КОНТЕКСТ:
+{context}
+
+ВОПРОС:
+{query}
+
+ОТВЕТ:
+""".strip()
+
+
+class Generator(BaseGenerator):
+
+    def __init__(
+        self,
+        llm: BaseLLMClient,
+        prompt_builder: BasePromptBuilder,
+        cleaner: BaseContextCleaner
+    ):
+
+        self.llm = llm
+        self.prompt_builder = prompt_builder
+        self.cleaner = cleaner
+
+    def generate(
+        self,
+        query: str,
+        context: str,
+        hits: Optional[List[SearchResult]] = None
+    ) -> str:
+
+        context = self.cleaner.clean_context(context)
+
+        if not context:
+
+            if hits:
+                context = self._build_fallback_context(hits)
+
+        if not context:
+            return "Ответ:\nНет данных в контексте\n\nИсточник:\n-"
+
+        prompt = self.prompt_builder.build(query, context)
+
+        raw = self.llm.generate(prompt)
+
+        return self._postprocess(raw)
+
+    def _build_fallback_context(
+        self,
+        hits: List[SearchResult]
+    ) -> str:
+
+        parts = []
+
+        for h in hits[:5]:
+
+            text = (h.text or "").strip()
+
+            if len(text) < 20:
+                continue
+
+            article = h.payload.get("article_number", "?")
+            header = h.payload.get("header", "")
+
+            parts.append(
+                f"Статья {article} — {header}\n{text[:500]}"
+            )
+
+        return "\n\n".join(parts)
+
+    def _postprocess(self, text: str) -> str:
+
+        if not text:
+            return "Недостаточно данных."
+
+        text = re.sub(
+            r"КОНЕЦ_ОТВЕТА.*",
+            "",
+            text,
+            flags=re.DOTALL
+        )
+
+        text = re.sub(
+            r"(?i)^ответ:\s*",
+            "Ответ:\n",
+            text
+        )
+
+        if text.count("Ответ:") > 1:
+            text = "Ответ:" + text.split("Ответ:")[1]
+
+        text = re.sub(
+            r"(?i)вот ответ:?",
+            "",
+            text
+        )
+
+        text = re.sub(
+            r"(?i)(reasoning|analysis|explanation).*",
+            "",
+            text
+        )
+
+        parts = re.split(
+            r"(Источник:)",
+            text,
+            maxsplit=1
+        )
+
+        if len(parts) == 3:
+            text = parts[0] + parts[1] + parts[2]
+        else:
+            text = parts[0]
+
+        text = re.sub(r"\n{3,}", "\n\n", text)
+
+        text = re.sub(r"\s+", " ", text).strip()
+
+        if "Источник:" not in text:
+            text += "\n\nИсточник:\n-"
+
+        return text.strip()
