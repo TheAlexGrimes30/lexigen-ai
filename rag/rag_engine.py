@@ -1,34 +1,20 @@
+# main.py
+
+import json
 from pathlib import Path
 
-from qdrant_client import QdrantClient
-
-from rag.generator import (
-    QwenClient,
-    Generator,
-    CreditPromptBuilder,
-    ContextCleaner,
-)
-
-from rag.index_service import IndexService
 from rag.ingestion import (
     MarkdownDocumentLoader,
     IngestionPipeline,
     IngestionService,
 )
 
-from rag.rag_chuckers import HybridLegalChunker
-from rag.rag_config import RAGResponse
-from rag.rag_service import RAGService
-from rag.reranker import Reranker
-from rag.retriever import Embedder, Retriever
-from rag.storage import VectorStore
+from rag.rag_chunkers import HybridLegalChunker
 
 
 class RAG:
 
     def __init__(self):
-
-        DEBUG_CHUNKS = True
 
         base_path = Path(__file__).resolve()
 
@@ -36,140 +22,88 @@ class RAG:
 
         rag_db_path = project_root / "rag_db"
 
-        loader = MarkdownDocumentLoader(
-            str(rag_db_path)
-        )
+        self.debug_path = project_root / "debug"
 
-        parser = HybridLegalChunker(
-            chunk_size=800,
-            chunk_overlap=120
-        )
+        loader = MarkdownDocumentLoader(str(rag_db_path))
+
+        parser = HybridLegalChunker()
 
         pipeline = IngestionPipeline(
             loader=loader,
             chunker=parser
         )
 
-        self.ingestion = IngestionService(
-            pipeline
+        self.ingestion = IngestionService(pipeline)
+
+    def build_chunks(self):
+
+        print("Loading chunks...\n")
+
+        chunks = self.ingestion.load_chunks()
+
+        print(f"Loaded chunks: {len(chunks)}")
+
+        self.save_chunks(chunks)
+
+        return chunks
+
+    def save_chunks(
+            self,
+            chunks,
+            filename: str = "chunks.json"
+    ):
+
+        self.debug_path.mkdir(
+            parents=True,
+            exist_ok=True
         )
 
-        embedder = Embedder(
-            model_name="Qwen/Qwen3-Embedding-0.6B"
-        )
+        output_file = self.debug_path / filename
 
-        self.client = QdrantClient(
-            host="localhost",
-            port=6333
-        )
+        data = []
 
-        vector_store = VectorStore(
-            client=self.client,
-            collection_name="credit_collection",
-            vector_size=embedder.dim
-        )
+        for chunk in chunks:
 
-        vector_store.ensure_collection()
+            data.append({
+                "chunk_id": chunk.chunk_id,
+                "text": chunk.text,
+                "metadata": {
+                    "source": chunk.metadata.source,
+                    "file": chunk.metadata.file,
+                    "header": chunk.metadata.header,
+                    "level": chunk.metadata.level,
+                    "article_number": chunk.metadata.article_number,
+                    "chunk_index": chunk.metadata.chunk_index,
+                    "topics": chunk.metadata.topics
+                }
+            })
 
-        self.index_service = IndexService(
-            vector_store=vector_store,
-            embedder=embedder
-        )
+        with open(output_file, "w", encoding="utf-8") as f:
 
-        retriever = Retriever(
-            vector_store=vector_store,
-            embedder=embedder
-        )
-
-        reranker = Reranker()
-
-        llm = QwenClient(
-            url="http://localhost:11434",
-            model="qwen2.5:3b"
-        )
-
-        generator = Generator(
-            llm=llm,
-            prompt_builder=CreditPromptBuilder(),
-            cleaner=ContextCleaner()
-        )
-
-        self.rag_service = RAGService(
-            retriever=retriever,
-            reranker=reranker,
-            generator=generator
-        )
-
-        print("\nRunning ingestion...")
-
-        self.chunks = self.ingestion.load_chunks()
-
-        print(f"\n[DEBUG] Total chunks: {len(self.chunks)}")
-
-        if DEBUG_CHUNKS:
-
-            parser.debug_chunks(
-                chunks=self.chunks,
-                limit=5,
-                preview=700
+            json.dump(
+                data,
+                f,
+                ensure_ascii=False,
+                indent=2
             )
 
-        print("\nIndexing chunks into Qdrant...")
-
-        self.index_service.index(
-            self.chunks
-        )
-
-        print("\nRAG initialized successfully.")
-
-    def ask(self, query: str) -> RAGResponse:
-
-        return self.rag_service.ask(query)
+        print(f"\n[DEBUG] Chunks saved:")
+        print(output_file.resolve())
 
     def close(self):
 
-        print("\nShutting down RAG...")
-
-        try:
-
-            self.client.close()
-
-            print("[INFO] Qdrant client closed.")
-
-        except Exception as e:
-
-            print(
-                "[WARN] Qdrant close error:",
-                repr(e)
-            )
+        print("Shutting down...")
 
 
 if __name__ == "__main__":
 
     rag = RAG()
 
-    questions = [
-        "какие действия может выполнять должник"
-    ]
-
     try:
 
-        for q in questions:
+        chunks = rag.build_chunks()
 
-            print("\n" + "=" * 80)
-
-            print("QUESTION:")
-            print(q)
-
-            print("=" * 80)
-
-            res = rag.ask(q)
-
-            print("\nANSWER:")
-            print(res.answer)
-
-            print("\nSOURCES:")
-            print(res.sources)
+        print("\nDone.")
 
     finally:
 
