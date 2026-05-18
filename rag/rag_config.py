@@ -19,6 +19,38 @@ class RAGResponse:
 
 @dataclass
 class ChunkMetadata:
+    """
+    Metadata container for a RAG chunk.
+
+    This structure is used across:
+    - ingestion pipeline
+    - vector storage (Qdrant)
+    - retrieval filtering
+    - reranking and evaluation
+
+    Attributes:
+        source (str):
+            Logical source of the document (e.g. "Civil Code RF").
+
+    file (str):
+        File path or identifier of the original document.
+
+    header (str | None):
+        Section or subsection title extracted from Markdown.
+
+    level (int | None):
+        Markdown heading level (1–6), representing hierarchy depth.
+
+    article_number (str | None):
+        Legal article identifier (e.g. "307").
+
+    chunk_index (int):
+        Sequential index of chunk within the document.
+
+    topics (List[str]):
+        Semantic tags used for hybrid retrieval and filtering.
+    """
+
     source: str
     file: str
     header: str | None
