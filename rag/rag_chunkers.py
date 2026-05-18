@@ -1,6 +1,5 @@
 import re
 import hashlib
-from typing import List, Dict
 
 from chonkie import SentenceChunker
 from chonkie.refinery import OverlapRefinery
@@ -9,8 +8,33 @@ from rag.rag_config import ChunkMetadata, Chunk
 
 
 class Sectioner:
+    """
+    Markdown section parser.
 
-    def extract_sections(self, text: str) -> List[Dict]:
+    Splits a Markdown document into hierarchical sections based on headers (H1–H6).
+    Each section contains:
+    - header text
+    - header level
+    - content lines under this header
+
+    This is used as a preprocessing step before chunking.
+    """
+
+    def extract_sections(self, text: str) -> list[dict]:
+        """
+        Extract sections from a Markdown document.
+
+        Args:
+            text (str): Raw Markdown document.
+
+        Returns:
+            List[Dict]: List of sections with structure:
+                {
+                    "header": str | None,
+                    "level": int,
+                    "content": List[str]
+                }
+        """
 
         sections = []
         current = {
@@ -49,8 +73,25 @@ class Sectioner:
 
 
 class ContextInjector:
+    """
+    Injects legal context into text.
+
+    Adds structured metadata (article number + section header)
+    into the chunk text to improve retrieval and reranking quality.
+    """
 
     def inject(self, article_number: str, header: str, text: str) -> str:
+        """
+        Inject legal context into raw text.
+
+        Args:
+            article_number (str): Legal article number (e.g., "307")
+            header (str): Section header
+            text (str): Raw section text
+
+        Returns:
+            str: Context-enhanced text
+        """
 
         context = []
 
@@ -66,12 +107,28 @@ class ContextInjector:
 
 
 class ChunkValidator:
+    """
+    Validates chunk quality.
+
+    Filters out:
+    - too short chunks
+    - low-information or noisy text
+    """
 
     def __init__(self, min_chars=120, min_words=20):
         self.min_chars = min_chars
         self.min_words = min_words
 
     def is_valid(self, text: str) -> bool:
+        """
+        Validate whether a chunk is useful for RAG.
+
+        Args:
+            text (str): Input chunk text
+
+        Returns:
+            bool: True if chunk is valid, False otherwise
+        """
 
         text = text.strip()
 
@@ -87,6 +144,17 @@ class ChunkValidator:
 
 
 class HybridLegalChunker:
+    """
+    Hybrid legal document chunking pipeline.
+
+    Pipeline steps:
+    1. Markdown → structured sections
+    2. Context injection (legal structure enrichment)
+    3. Sentence-based chunking (Chonkie SentenceChunker)
+    4. Overlap refinement (OverlapRefinery)
+    5. Validation
+    6. Metadata attachment
+    """
 
     def __init__(self):
 
@@ -103,7 +171,17 @@ class HybridLegalChunker:
 
         self.global_chunk_index = 0
 
-    def _extract_article(self, header, frontmatter):
+    def _extract_article(self, header: str, frontmatter: dict) -> str | None:
+        """
+        Extract legal article number from header or metadata.
+
+        Args:
+            header (str): Section header
+            frontmatter (dict): YAML metadata
+
+        Returns:
+            str | None: Extracted article number if available
+        """
 
         if header:
             m = re.search(r'Статья\s+(\d+)', header)
@@ -118,10 +196,31 @@ class HybridLegalChunker:
         return frontmatter.get("article")
 
     def _make_chunk_id(self, text: str, filepath: str, index: int) -> str:
+        """
+        Generate deterministic chunk ID using hash.
+
+        Args:
+            text (str): Chunk text
+            filepath (str): Source file path
+            index (int): Global chunk index
+
+        Returns:
+            str: Unique chunk identifier
+        """
+
         raw = f"{filepath}:{index}:{text[:200]}"
         return hashlib.md5(raw.encode("utf-8")).hexdigest()
 
     def _prepare_legal_text(self, text: str) -> str:
+        """
+        Normalize legal text for better chunking.
+
+        Args:
+            text (str): Raw text
+
+        Returns:
+            str: Cleaned and normalized text
+        """
 
         text = re.sub(r'\n{3,}', '\n\n', text)
         text = re.sub(r'---+', '', text)
@@ -129,7 +228,23 @@ class HybridLegalChunker:
 
         return text.strip()
 
-    def process_section(self, section, base_metadata, filepath):
+    def process_section(self,
+                        section: dict,
+                        base_metadata: ChunkMetadata,
+                        filepath: str
+                        ) -> list[Chunk]:
+
+        """
+        Convert a single section into RAG chunks.
+
+        Args:
+            section (Dict): Parsed Markdown section
+            base_metadata (ChunkMetadata): Shared metadata
+            filepath (str): Source file path
+
+        Returns:
+            List[Chunk]: Generated chunks
+        """
 
         header = section["header"]
         raw_text = "\n".join(section["content"]).strip()
@@ -182,7 +297,23 @@ class HybridLegalChunker:
 
         return results
 
-    def create_chunks(self, sections, frontmatter, filepath):
+    def create_chunks(self,
+                      sections: list[dict],
+                      frontmatter: dict,
+                      filepath: str
+                      ) -> list[Chunk]:
+        """
+        Build all chunks from parsed document sections.
+
+        Args:
+            sections (List[Dict]): Markdown sections
+            frontmatter (dict): Document metadata (YAML)
+            filepath (str): Source file path
+
+        Returns:
+            List[Chunk]: Final chunk list
+        """
+
 
         all_chunks = []
 
@@ -206,7 +337,19 @@ class HybridLegalChunker:
 
         return all_chunks
 
-    def process(self, filepath: str, frontmatter: dict, body: str):
+    def process(self, filepath: str, frontmatter: dict, body: str) -> list[Chunk]:
+        """
+        Entry point for the chunking pipeline.
+
+        Args:
+            filepath (str): Path to Markdown file
+            frontmatter (dict): YAML metadata
+            body (str): Raw Markdown content
+
+        Returns:
+            List[Chunk]: Final processed chunks
+        """
 
         sections = self.sectioner.extract_sections(body)
         return self.create_chunks(sections, frontmatter, filepath)
+    
