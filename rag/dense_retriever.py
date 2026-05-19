@@ -1,12 +1,8 @@
-import re
 from abc import ABC, abstractmethod
-from collections import defaultdict
 from functools import lru_cache
 from typing import List, Set
 import hashlib
 
-from llama_index.core import VectorStoreIndex
-from llama_index.core.indices.vector_store import VectorIndexRetriever
 from sentence_transformers import SentenceTransformer
 
 from rag.search_result import SearchResult
@@ -233,35 +229,15 @@ class Embedder:
 
 
 class QdrantDenseRetriever(BaseDenseRetriever):
-    """
-    Dense semantic retriever over Qdrant.
-
-    Performs cosine similarity search
-    using embedding vectors.
-    """
 
     def __init__(self, vector_store):
         self.vector_store = vector_store
 
     def search(
         self,
-        query_vec: list[float],
+        query_vec: List[float],
         k: int
-    ) -> list[SearchResult]:
-        """
-        Execute vector similarity search.
-
-        Args:
-            query_vec (List[float]):
-                Query embedding vector.
-
-            k (int):
-                Number of documents to retrieve.
-
-        Returns:
-            List[SearchResult]:
-                Retrieved search results.
-        """
+    ) -> List[SearchResult]:
 
         hits = self.vector_store.search(
             query_vector=query_vec,
@@ -279,263 +255,29 @@ class QdrantDenseRetriever(BaseDenseRetriever):
 
         return results
 
-class LightRAGEnhancer:
-    """
-    Semantic enhancement layer for retrieval (LlamaIndex-based version).
-
-    This component preserves original logic:
-    - semantic query expansion
-    - legal synonym expansion
-    - neighbor-based chunk expansion
-    - article graph construction
-    """
-
-    def __init__(
-        self,
-        index: VectorStoreIndex,
-        neighbor_window: int = 1,
-        max_expansion: int = 20
-    ) -> None:
-        """
-        Args:
-            index (VectorStoreIndex):
-                LlamaIndex vector index (Qdrant / in-memory / etc.)
-
-            neighbor_window (int):
-                Number of neighboring articles/chunks to include.
-
-            max_expansion (int):
-                Max number of expanded candidates.
-        """
-
-        self.index = index
-        self.neighbor_window = neighbor_window
-        self.max_expansion = max_expansion
-
-        self.legal_synonyms = {
-            "должник": [
-                "обязанное лицо",
-                "исполнитель обязательства"
-            ],
-            "кредитор": [
-                "управомоченное лицо",
-                "получатель исполнения"
-            ],
-            "обязательство": [
-                "гражданское обязательство",
-                "договорное обязательство"
-            ],
-            "договор": [
-                "соглашение",
-                "контракт",
-            ],
-            "убытки": [
-                "вред",
-                "ущерб",
-                "компенсация"
-            ],
-            "неустойка": [
-                "штраф",
-                "пеня"
-            ],
-        }
-
-    def enrich_query(self, query: str) -> str:
-        """
-        Expand query using legal synonyms and article normalization.
-        """
-
-        query = query.strip().lower()
-
-        expanded_terms: Set[str] = set()
-        expanded_terms.add(query)
-
-        words = re.findall(r"\w+", query)
-
-        for word in words:
-            if word in self.legal_synonyms:
-                expanded_terms.update(self.legal_synonyms[word])
-
-        article_match = re.findall(
-            r"(?:статья|ст\.?)\s*(\d+(?:\.\d+)?)",
-            query,
-            flags=re.IGNORECASE
-        )
-
-        for art in article_match:
-            expanded_terms.add(f"статья {art}")
-            expanded_terms.add(f"гк рф статья {art}")
-            expanded_terms.add(f"норма {art}")
-
-        return " ".join(expanded_terms)
-
-    def expand_candidates(
-        self,
-        candidates: List[SearchResult]
-    ) -> List[SearchResult]:
-
-        if not candidates:
-            return []
-
-        expanded: List[SearchResult] = []
-        seen_ids: Set[str] = set()
-
-        article_groups: dict[str, List[SearchResult]] = defaultdict(list)
-
-        for cand in candidates:
-
-            if not cand:
-                continue
-
-            expanded.append(cand)
-
-            if cand.id:
-                seen_ids.add(cand.id)
-
-            article = getattr(cand, "article_number", None)
-
-            if article:
-                article_groups[article].append(cand)
-
-        article_numbers = []
-
-        for art in article_groups.keys():
-            try:
-                article_numbers.append(float(art))
-            except Exception:
-                continue
-
-        article_numbers = sorted(article_numbers)
-
-        article_lookup = {
-            float(k): v
-            for k, v in article_groups.items()
-            if self._is_float(k)
-        }
-
-        for art_num in article_numbers:
-
-            for offset in range(
-                -self.neighbor_window,
-                self.neighbor_window + 1
-            ):
-                if offset == 0:
-                    continue
-
-                neighbor = art_num + offset
-
-                if neighbor not in article_lookup:
-                    continue
-
-                for candidate in article_lookup[neighbor]:
-
-                    if candidate.id and candidate.id in seen_ids:
-                        continue
-
-                    expanded.append(candidate)
-
-                    if candidate.id:
-                        seen_ids.add(candidate.id)
-
-        expanded = self._deduplicate(expanded)
-
-        return expanded[:self.max_expansion]
-
-    def build_graph(
-        self,
-        candidates: list[SearchResult]
-    ) -> dict[str, set[str]]:
-
-        graph: dict[str, set[str]] = defaultdict(set)
-
-        articles = []
-
-        for c in candidates:
-            article = getattr(c, "article_number", None)
-            if article:
-                articles.append(article)
-
-        unique_articles = sorted(
-            set(articles),
-            key=lambda x: float(x) if self._is_float(x) else 0
-        )
-
-        for idx, article in enumerate(unique_articles):
-
-            if idx > 0:
-                graph[article].add(unique_articles[idx - 1])
-
-            if idx < len(unique_articles) - 1:
-                graph[article].add(unique_articles[idx + 1])
-
-        return graph
-
-
-    def _deduplicate(
-        self,
-        candidates: List[SearchResult]
-    ) -> List[SearchResult]:
-
-        seen: Set[str] = set()
-        result: List[SearchResult] = []
-
-        for c in candidates:
-
-            key = c.id or (c.text[:150] if c.text else "")
-
-            if key in seen:
-                continue
-
-            seen.add(key)
-            result.append(c)
-
-        return result
-
-
-    @staticmethod
-    def _is_float(value: str) -> bool:
-        try:
-            float(value)
-            return True
-        except Exception:
-            return False
-
 
 class Retriever(BaseRetriever):
-    """
-    Main semantic retriever (LlamaIndex-based).
-
-    Pipeline:
-    1. Query enrichment (optional)
-    2. LlamaIndex retrieval (auto embeddings)
-    3. Filtering
-    4. Optional graph expansion
-    """
 
     def __init__(
         self,
         vector_store,
+        embedder: Embedder,
         *,
+        pool_multiplier: int = 8,
         max_pool_size: int = 80,
-        min_text_len: int = 40,
-        use_enhancer: bool = True
+        min_text_len: int = 40
     ):
 
         self.vector_store = vector_store
+        self.embedder = embedder
 
-        self.max_pool_size = max_pool_size
-        self.min_text_len = min_text_len
-
-        self.index = VectorStoreIndex.from_vector_store(vector_store)
-
-        self.retriever = VectorIndexRetriever(
-            index=self.index,
-            similarity_top_k=max_pool_size
+        self.dense = QdrantDenseRetriever(
+            vector_store
         )
 
-        self.enhancer = None
-        if use_enhancer:
-            self.enhancer = LightRAGEnhancer(index=self.index)
+        self.pool_multiplier = pool_multiplier
+        self.max_pool_size = max_pool_size
+        self.min_text_len = min_text_len
 
     def retrieve(
         self,
@@ -544,34 +286,27 @@ class Retriever(BaseRetriever):
     ) -> List[SearchResult]:
 
         query = (query or "").strip()
+
         if not query:
             return []
 
-        if self.enhancer:
-            query = self.enhancer.enrich_query(query)
+        query_vec = self.embedder.encode_queries(
+            [query]
+        )[0]
 
-        nodes = self.retriever.retrieve(query)
+        pool_size = min(
+            self.max_pool_size,
+            max(top_k * self.pool_multiplier, 30)
+        )
 
-        candidates: List[SearchResult] = []
+        candidates = self.dense.search(
+            query_vec=query_vec,
+            k=pool_size
+        )
 
-        for n in nodes:
-            node = n.node
-
-            text = node.get_content()
-
-            candidates.append(
-                SearchResult(
-                    id=getattr(node, "id_", None),
-                    text=text,
-                    score=float(getattr(n, "score", 0.0) or 0.0),
-                    payload={}
-                )
-            )
-
-        candidates = self._basic_filter(candidates)
-
-        if self.enhancer:
-            candidates = self.enhancer.expand_candidates(candidates)
+        candidates = self._basic_filter(
+            candidates
+        )
 
         return candidates[:top_k]
 
@@ -581,20 +316,28 @@ class Retriever(BaseRetriever):
     ) -> List[SearchResult]:
 
         seen: Set[str] = set()
+
         result: List[SearchResult] = []
 
         for h in hits:
 
             text = (h.text or "").strip()
+
             if len(text) < self.min_text_len:
                 continue
 
-            key = h.id or hashlib.md5(text[:200].encode()).hexdigest()
+            key = (
+                h.id
+                or hashlib.md5(
+                    text[:200].encode()
+                ).hexdigest()
+            )
 
             if key in seen:
                 continue
 
             seen.add(key)
+
             result.append(h)
 
         return result
@@ -603,25 +346,37 @@ class Retriever(BaseRetriever):
         self,
         query: str,
         top_k: int = 10
-    ) -> None:
+    ):
 
         print("\n" + "=" * 80)
+
         print(f"[QUERY] {query}")
+
+        query = (query or "").strip()
 
         if not query:
             print("Empty query")
             return
 
-        nodes = self.retriever.retrieve(query)
+        query_vec = self.embedder.encode_queries(
+            [query]
+        )[0]
 
-        print(f"\n[LlamaIndex TOP {top_k}]")
+        hits = self.dense.search(
+            query_vec=query_vec,
+            k=top_k
+        )
 
-        for i, n in enumerate(nodes[:top_k], start=1):
+        print(f"\n[DENSE TOP {top_k}]")
+
+        for i, h in enumerate(hits, start=1):
 
             print(
-                f"{i}. score={getattr(n, 'score', 0.0):.4f} "
-                f"| id={getattr(n.node, 'id_', None)}"
+                f"{i}. "
+                f"score={h.score:.4f} "
+                f"| id={h.id}"
             )
 
-            print(n.node.get_content()[:400])
+            print((h.text or "")[:400])
+
             print()
