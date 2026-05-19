@@ -3,6 +3,11 @@
 import json
 from pathlib import Path
 
+from qdrant_client import QdrantClient
+from qdrant_client.http.models import Distance
+
+from rag.dense_retriever import Embedder
+from rag.index_service import IndexService
 from rag.ingestion import (
     MarkdownDocumentLoader,
     IngestionPipeline,
@@ -10,6 +15,7 @@ from rag.ingestion import (
 )
 
 from rag.rag_chunkers import HybridLegalChunker
+from rag.storage import VectorStore
 
 
 class RAG:
@@ -17,15 +23,12 @@ class RAG:
     def __init__(self):
 
         base_path = Path(__file__).resolve()
-
         project_root = base_path.parents[1]
 
         rag_db_path = project_root / "rag_db"
-
         self.debug_path = project_root / "debug"
 
         loader = MarkdownDocumentLoader(str(rag_db_path))
-
         parser = HybridLegalChunker()
 
         pipeline = IngestionPipeline(
@@ -35,7 +38,28 @@ class RAG:
 
         self.ingestion = IngestionService(pipeline)
 
-    def build_chunks(self):
+        self.embedder = Embedder(
+            model_name="Qwen/Qwen3-Embedding-0.6B",
+            normalize=True
+        )
+
+        self.qdrant = QdrantClient("localhost", port=6333)
+
+        self.vector_store = VectorStore(
+            client=self.qdrant,
+            collection_name="credit_collection",
+            vector_size=self.embedder.dim,
+            distance=Distance.COSINE
+        )
+
+        self.vector_store.ensure_collection()
+
+        self.index_service = IndexService(
+            vector_store=self.vector_store,
+            embedder=self.embedder
+        )
+
+    def build_and_index(self):
 
         print("Loading chunks...\n")
 
@@ -43,27 +67,39 @@ class RAG:
 
         print(f"Loaded chunks: {len(chunks)}")
 
-        self.save_chunks(chunks)
+        #self.save_chunks(chunks)
+
+        self.index_if_needed(chunks)
 
         return chunks
 
-    def save_chunks(
-            self,
-            chunks,
-            filename: str = "chunks.json"
-    ):
+    def index_if_needed(self, chunks):
 
-        self.debug_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
+        collection = self.vector_store.collection_name
+
+        info = self.qdrant.get_collection(collection)
+
+        points_count = info.points_count
+
+        if points_count > 0:
+            print(f"[Index] Skipping indexing — collection already has {points_count} points")
+            return
+
+        print("[Index] Collection empty — starting indexing...")
+
+        self.index_service.index(chunks)
+
+        print("[Index] Done indexing")
+
+    def save_chunks(self, chunks, filename: str = "chunks.json"):
+
+        self.debug_path.mkdir(parents=True, exist_ok=True)
 
         output_file = self.debug_path / filename
 
         data = []
 
         for chunk in chunks:
-
             data.append({
                 "chunk_id": chunk.chunk_id,
                 "text": chunk.text,
@@ -79,19 +115,11 @@ class RAG:
             })
 
         with open(output_file, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
 
-            json.dump(
-                data,
-                f,
-                ensure_ascii=False,
-                indent=2
-            )
-
-        print(f"\n[DEBUG] Chunks saved:")
-        print(output_file.resolve())
+        print(f"\n[DEBUG] Chunks saved: {output_file.resolve()}")
 
     def close(self):
-
         print("Shutting down...")
 
 
@@ -100,11 +128,8 @@ if __name__ == "__main__":
     rag = RAG()
 
     try:
-
-        chunks = rag.build_chunks()
-
+        chunks = rag.build_and_index()
         print("\nDone.")
 
     finally:
-
         rag.close()
