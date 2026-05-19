@@ -4,6 +4,25 @@ from typing import List
 import pandas as pd
 
 
+def unique_preserve_order(
+    items: List[int]
+) -> List[int]:
+
+    seen = set()
+
+    result = []
+
+    for item in items:
+
+        if item not in seen:
+
+            seen.add(item)
+
+            result.append(item)
+
+    return result
+
+
 def recall_at_k(
     retrieved: List[int],
     relevant: List[int]
@@ -12,9 +31,9 @@ def recall_at_k(
     if not relevant:
         return 0.0
 
-    return float(
-        len(set(retrieved) & set(relevant)) > 0
-    )
+    hits = set(retrieved) & set(relevant)
+
+    return float(len(hits) > 0)
 
 
 def precision_at_k(
@@ -27,8 +46,8 @@ def precision_at_k(
 
     hits = sum(
         1
-        for a in retrieved
-        if a in relevant
+        for article in retrieved
+        if article in relevant
     )
 
     return hits / len(retrieved)
@@ -39,9 +58,9 @@ def mrr_at_k(
     relevant: List[int]
 ) -> float:
 
-    for i, a in enumerate(retrieved):
+    for i, article in enumerate(retrieved):
 
-        if a in relevant:
+        if article in relevant:
             return 1.0 / (i + 1)
 
     return 0.0
@@ -84,77 +103,127 @@ def evaluate_rag(
 
         hits = rag.retriever.retrieve(
             query=query,
-            top_k=5
+            top_k=10
         )
 
         retrieved_articles = []
 
-        contexts = []
+        retrieved_chunks = []
 
-        for h in hits:
+        for rank, h in enumerate(
+            hits,
+            start=1
+        ):
 
             article = None
 
             if h.payload:
+
                 article = h.payload.get(
                     "article_number"
                 )
 
-            if article is not None:
+            try:
 
-                try:
+                if article is not None:
+
+                    article = int(article)
+
                     retrieved_articles.append(
-                        int(article)
+                        article
                     )
-                except Exception:
-                    pass
 
-            contexts.append(h.text)
+            except Exception:
+                continue
+
+            retrieved_chunks.append({
+
+                "rank":
+                    rank,
+
+                "article":
+                    article,
+
+                "score":
+                    round(h.score, 4),
+
+                "text":
+                    (h.text or "")[:1500]
+            })
+
+        # IMPORTANT:
+        # remove duplicate articles
+        # while preserving ranking order
+
+        unique_articles = (
+            unique_preserve_order(
+                retrieved_articles
+            )
+        )
+
+        # METRICS
 
         recall = recall_at_k(
-            retrieved_articles,
+            unique_articles,
             relevant_articles
         )
 
         precision = precision_at_k(
-            retrieved_articles,
+            unique_articles,
             relevant_articles
         )
 
         mrr = mrr_at_k(
-            retrieved_articles,
+            unique_articles,
             relevant_articles
         )
 
-        metrics["recall"].append(recall)
+        metrics["recall"].append(
+            recall
+        )
 
-        metrics["precision"].append(precision)
+        metrics["precision"].append(
+            precision
+        )
 
-        metrics["mrr"].append(mrr)
-
-        print(
-            f"RELEVANT: {relevant_articles}"
+        metrics["mrr"].append(
+            mrr
         )
 
         print(
-            f"RETRIEVED: {retrieved_articles}"
+            f"RELEVANT: "
+            f"{relevant_articles}"
         )
 
         print(
-            f"RECALL@5: {recall:.4f}"
+            f"RETRIEVED RAW: "
+            f"{retrieved_articles}"
         )
 
         print(
-            f"PRECISION@5: {precision:.4f}"
+            f"RETRIEVED UNIQUE: "
+            f"{unique_articles}"
         )
 
         print(
-            f"MRR@5: {mrr:.4f}"
+            f"RECALL@5: "
+            f"{recall:.4f}"
+        )
+
+        print(
+            f"PRECISION@5: "
+            f"{precision:.4f}"
+        )
+
+        print(
+            f"MRR@5: "
+            f"{mrr:.4f}"
         )
 
         results.append({
 
-            "question": query,
+            "question":
+                query,
 
             "relevant_articles":
                 relevant_articles,
@@ -162,8 +231,11 @@ def evaluate_rag(
             "hard_negatives":
                 hard_negatives,
 
-            "retrieved_articles":
+            "retrieved_articles_raw":
                 retrieved_articles,
+
+            "retrieved_articles_unique":
+                unique_articles,
 
             "recall@5":
                 recall,
@@ -174,20 +246,32 @@ def evaluate_rag(
             "mrr@5":
                 mrr,
 
-            "contexts":
-                contexts
+            "retrieved_chunks":
+                retrieved_chunks
         })
 
     report = {
 
         "recall@5":
-            sum(metrics["recall"]) / len(dataset),
+            round(
+                sum(metrics["recall"])
+                / len(dataset),
+                4
+            ),
 
         "precision@5":
-            sum(metrics["precision"]) / len(dataset),
+            round(
+                sum(metrics["precision"])
+                / len(dataset),
+                4
+            ),
 
         "mrr@5":
-            sum(metrics["mrr"]) / len(dataset),
+            round(
+                sum(metrics["mrr"])
+                / len(dataset),
+                4
+            )
     }
 
     print("\n" + "=" * 80)
@@ -224,7 +308,38 @@ def evaluate_rag(
             indent=4
         )
 
-    pd.DataFrame(results).to_csv(
+    # CSV export
+
+    csv_rows = []
+
+    for sample in results:
+
+        csv_rows.append({
+
+            "question":
+                sample["question"],
+
+            "relevant_articles":
+                sample[
+                    "relevant_articles"
+                ],
+
+            "retrieved_articles_unique":
+                sample[
+                    "retrieved_articles_unique"
+                ],
+
+            "recall@5":
+                sample["recall@5"],
+
+            "precision@5":
+                sample["precision@5"],
+
+            "mrr@5":
+                sample["mrr@5"]
+        })
+
+    pd.DataFrame(csv_rows).to_csv(
 
         output_path.replace(
             ".json",
@@ -235,4 +350,6 @@ def evaluate_rag(
         encoding="utf-8"
     )
 
-    print(f"\nSaved -> {output_path}")
+    print(
+        f"\nSaved -> {output_path}"
+    )
