@@ -9,17 +9,44 @@ from rag.search_result import SearchResult
 
 
 class BaseDenseRetriever(ABC):
+    """
+    Abstract interface for dense vector retrievers.
+
+    Dense retrievers perform semantic similarity search
+    using embedding vectors.
+    """
 
     @abstractmethod
     def search(
         self,
-        query_vec: List[float],
+        query_vec: list[float],
         k: int
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
+        """
+        Execute dense vector similarity search.
+
+        Args:
+            query_vec (List[float]):
+                Query embedding vector.
+
+            k (int):
+                Number of documents to retrieve.
+
+        Returns:
+            List[SearchResult]:
+                Retrieved search results.
+        """
+
         raise NotImplementedError
 
 
 class BaseRetriever(ABC):
+    """
+    Abstract interface for retrievers.
+
+    Retriever converts text query into embeddings
+    and returns relevant search results.
+    """
 
     @abstractmethod
     def retrieve(
@@ -27,10 +54,34 @@ class BaseRetriever(ABC):
         query: str,
         top_k: int = 10
     ) -> List[SearchResult]:
+        """
+        Retrieve relevant chunks for a query.
+
+        Args:
+            query (str):
+                User query.
+
+            top_k (int):
+                Number of chunks to return.
+
+        Returns:
+            List[SearchResult]:
+                Retrieved chunks.
+        """
+
         raise NotImplementedError
 
 
 class Embedder:
+    """
+    Wrapper around SentenceTransformer models.
+
+    Responsible for:
+    - loading embedding model
+    - query/document encoding
+    - E5 prefix handling
+    - vector normalization
+    """
 
     def __init__(
         self,
@@ -50,14 +101,37 @@ class Embedder:
 
     @staticmethod
     @lru_cache(maxsize=2)
-    def _load_model(model_name: str):
+    def _load_model(model_name: str) -> SentenceTransformer:
+        """
+        Load and cache embedding model.
+
+        Args:
+            model_name (str):
+                HuggingFace model name.
+
+        Returns:
+            SentenceTransformer:
+                Loaded embedding model.
+        """
 
         return SentenceTransformer(model_name)
 
     def encode_queries(
         self,
-        texts: List[str]
-    ) -> List[List[float]]:
+        texts: list[str]
+    ) -> list[list[float]]:
+        """
+        Encode search queries.
+
+        Args:
+            texts (List[str]):
+                Query texts.
+
+        Returns:
+            List[List[float]]:
+                Query embeddings.
+        """
+
 
         texts = self._apply_prefix(
             texts,
@@ -68,8 +142,19 @@ class Embedder:
 
     def encode_passages(
         self,
-        texts: List[str]
-    ) -> List[List[float]]:
+        texts: list[str]
+    ) -> list[list[float]]:
+        """
+        Encode document passages.
+
+        Args:
+            texts (List[str]):
+                Passage texts.
+
+        Returns:
+            List[List[float]]:
+                Passage embeddings.
+        """
 
         texts = self._apply_prefix(
             texts,
@@ -83,6 +168,24 @@ class Embedder:
         texts: List[str],
         is_query: bool
     ) -> List[str]:
+        """
+        Apply E5 prefixes if model requires them.
+
+        E5 models require:
+        - "query: " for queries
+        - "passage: " for documents
+
+        Args:
+            texts (List[str]):
+                Input texts.
+
+            is_query (bool):
+                Whether texts are queries.
+
+         Returns:
+            List[str]:
+                Prefixed texts.
+        """
 
         if "e5" not in self.model_name.lower():
             return texts
@@ -100,8 +203,19 @@ class Embedder:
 
     def _encode(
         self,
-        texts: List[str]
-    ) -> List[List[float]]:
+        texts: list[str]
+    ) -> list[list[float]]:
+        """
+        Encode texts into embeddings.
+
+        Args:
+            texts (List[str]):
+                Input texts.
+
+        Returns:
+            List[List[float]]:
+                Embedding vectors.
+        """
 
         vectors = self._model.encode(
             texts,
