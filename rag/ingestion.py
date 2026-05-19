@@ -29,6 +29,45 @@ class BaseDocumentLoader(ABC):
 
         raise NotImplementedError
 
+class BasePipeline(ABC):
+    """
+    Abstract base class for ingestion pipelines.
+
+    Defines the interface for document processing pipelines.
+    """
+
+    @abstractmethod
+    def run(self) -> list[Chunk]:
+        """
+        Execute pipeline processing.
+
+        Returns:
+            List[Chunk]:
+                List of processed chunks.
+        """
+
+        raise NotImplementedError
+
+class BaseIngestionService(ABC):
+    """
+    Abstract base class for ingestion services.
+
+    Defines high-level ingestion operations.
+    """
+
+    @abstractmethod
+    def load_chunks(self) -> list[Chunk]:
+        """
+        Load processed chunks from pipeline.
+
+        Returns:
+            List[Chunk]:
+                List of generated chunks.
+        """
+
+        raise NotImplementedError
+
+
 class MarkdownDocumentLoader(BaseDocumentLoader):
     """
     Loader for Markdown documents.
@@ -87,7 +126,7 @@ class MarkdownDocumentLoader(BaseDocumentLoader):
 
         return frontmatter, body
 
-class IngestionPipeline:
+class IngestionPipeline(BasePipeline):
     """
     Main ingestion pipeline.
 
@@ -133,7 +172,7 @@ class IngestionPipeline:
 
         return [c for c in chunks if c.text.strip()]
 
-class IngestionService:
+class IngestionService(BaseIngestionService):
     """
     High-level ingestion service.
 
