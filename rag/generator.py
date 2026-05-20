@@ -7,6 +7,7 @@ from llama_cpp import Llama
 from rag.search_result import SearchResult
 
 
+
 class BaseLLMClient(ABC):
 
     @abstractmethod
@@ -50,6 +51,7 @@ class ContextCleaner(BaseContextCleaner):
         return text.strip()
 
 
+
 class QwenClient(BaseLLMClient):
 
     def __init__(self, model_path: str):
@@ -66,10 +68,12 @@ class QwenClient(BaseLLMClient):
                 {
                     "role": "system",
                     "content": (
-                        "Ты юридический ассистент по российскому гражданскому праву.\n"
-                        "Отвечай кратко и юридически точно.\n"
-                        "Используй только предоставленный контекст.\n"
-                        "Не добавляй несуществующие статьи или нормы."
+                        "Ты модуль извлечения юридических норм.\n"
+                        "НЕ веди диалог.\n"
+                        "НЕ объясняй процесс.\n"
+                        "НЕ используй слова типа: 'сначала', 'проверяю', 'анализирую'.\n"
+                        "Выводи только готовый юридический ответ.\n"
+                        "Никаких рассуждений и пояснений."
                     )
                 },
                 {
@@ -78,7 +82,7 @@ class QwenClient(BaseLLMClient):
                 }
             ],
 
-            temperature=0.2,
+            temperature=0.15,
             top_p=0.85,
             repeat_penalty=1.1,
             max_tokens=512
@@ -86,20 +90,28 @@ class QwenClient(BaseLLMClient):
 
         return output["choices"][0]["message"]["content"].strip()
 
+
+
 class LaborPromptBuilder(BasePromptBuilder):
 
     def build(self, query: str, context: str) -> str:
         return f"""
-        Контекст — это единственный источник истины.
+        Ты извлекаешь юридический ответ ТОЛЬКО из контекста.
         
-        Используй ТОЛЬКО его.
+        ПРАВИЛА:
+        - НЕ объясняй ход мыслей
+        - НЕ используй слова: "сначала", "проверяю", "анализ"
+        - НЕ добавляй внешние знания
+        - НЕ рассуждай
         
-        Ответ:
-        - 3–7 предложений
+        ФОРМАТ:
+        - 3–6 предложений
+        - юридически точный текст
         - без списков
-        - без рассуждений
-        - строго юридический стиль
-        - в конце: указать статью
+        - без вступлений
+        
+        ЕСЛИ НЕТ ДАННЫХ:
+        Ответ: "Нет данных в предоставленных источниках"
         
         =====================
         КОНТЕКСТ
@@ -112,9 +124,10 @@ class LaborPromptBuilder(BasePromptBuilder):
         {query}
         
         =====================
-        ОТВЕТ
+        ОТВЕТ:
         =====================
         """.strip()
+
 
 
 class Generator(BaseGenerator):
@@ -139,16 +152,6 @@ class Generator(BaseGenerator):
         if len(context) < 30:
             return "Недостаточно данных."
 
-        print("\n" + "=" * 100)
-        print("[GENERATOR CONTEXT]")
-        print("=" * 100)
-
-        print(context)
-
-        print("\n" + "=" * 100)
-        print("[END CONTEXT]")
-        print("=" * 100)
-
         prompt = self.prompt_builder.build(query, context)
 
         try:
@@ -158,6 +161,7 @@ class Generator(BaseGenerator):
             return "Ошибка генерации ответа."
 
         return self._postprocess(raw)
+
 
     def _build_fallback_context(self, hits: List[SearchResult]) -> str:
         parts = []
@@ -189,6 +193,9 @@ class Generator(BaseGenerator):
 
         if len(text.split()) < 6:
             return "Недостаточно данных."
+
+        if re.search(r"(?i)\b(сначала|проверяю|анализирую|рассмотрю)\b", text):
+            text = re.sub(r"(?i)\b(сначала|проверяю|анализирую|рассмотрю).*", "", text).strip()
 
         return text
 
