@@ -47,7 +47,6 @@ class ContextCleaner(BaseContextCleaner):
         text = re.sub(r"\*+", "", text)
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]+", " ", text)
-
         return text.strip()
 
 
@@ -67,16 +66,10 @@ class QwenClient(BaseLLMClient):
                 {
                     "role": "system",
                     "content": (
-                        "Ты юридический ассистент по Трудовому кодексу РФ.\n"
-                        "Отвечай строго одним абзацем.\n"
-                        "Запрещено:\n"
-                        "- списки\n"
-                        "- reasoning\n"
-                        "- объяснения\n"
-                        "- рассуждения\n"
-                        "- английские служебные фразы (A:, Okay, Let's)\n"
-                        "- любые шаги решения\n"
-                        "Верни только финальный юридический ответ."
+                        "Ты юридический ассистент по российскому гражданскому праву.\n"
+                        "Отвечай кратко и юридически точно.\n"
+                        "Используй только предоставленный контекст.\n"
+                        "Не добавляй несуществующие статьи или нормы."
                     )
                 },
                 {
@@ -85,80 +78,41 @@ class QwenClient(BaseLLMClient):
                 }
             ],
 
-            temperature=0.3,
-            top_p=0.8,
+            temperature=0.2,
+            top_p=0.85,
             repeat_penalty=1.1,
-            max_tokens=512,
-
-            stop=[
-                "A:",
-                "Answer:",
-                "Okay",
-                "Let's",
-                "Reasoning",
-                "Explanation",
-                "Обоснование",
-                "Анализ"
-            ]
+            max_tokens=512
         )
 
         return output["choices"][0]["message"]["content"].strip()
-
-    def close(self):
-        self.llm = None
-
 
 class LaborPromptBuilder(BasePromptBuilder):
 
     def build(self, query: str, context: str) -> str:
         return f"""
-        Ты юридическая система по Кредитному праву РФ.
-
-        =====================
-        ИНСТРУКЦИЯ
-        =====================
-
-        Верни только готовый юридический ответ.
-
-        Строго запрещено:
-        - рассуждения
-        - reasoning
-        - анализ
-        - пояснения
-        - chain of thought
-        - описание процесса
-        - служебные фразы
-
-        Не используй:
-        - "Нужно ответить"
-        - "Важно"
-        - "Сначала"
-        - "Убеждаюсь"
-
-        Формат ответа:
-        - один связный юридический текст
-        - без списка
-        - без вступления
-        - без пояснений
-        - в конце обязательно укажи источник
-
-        Пример формата:
-        Кредитное законодательство устанавливает ... в соответствии с Гражданским кодексом РФ, статья 307.
-
+        Контекст — это единственный источник истины.
+        
+        Используй ТОЛЬКО его.
+        
+        Ответ:
+        - 3–7 предложений
+        - без списков
+        - без рассуждений
+        - строго юридический стиль
+        - в конце: указать статью
+        
         =====================
         КОНТЕКСТ
         =====================
-
         {context}
-
+        
         =====================
         ВОПРОС
         =====================
-
         {query}
-
+        
         =====================
-        ФИНАЛЬНЫЙ ОТВЕТ
+        ОТВЕТ
         =====================
         """.strip()
 
@@ -206,11 +160,9 @@ class Generator(BaseGenerator):
         return self._postprocess(raw)
 
     def _build_fallback_context(self, hits: List[SearchResult]) -> str:
-
         parts = []
 
         for h in hits[:5]:
-
             text = (h.text or "").strip()
             if len(text) < 20:
                 continue
@@ -218,32 +170,24 @@ class Generator(BaseGenerator):
             article = h.payload.get("article_number", "?")
             header = h.payload.get("header", "")
 
-            parts.append(
-                f"Статья {article} — {header}\n{text[:700]}"
-            )
+            parts.append(f"Статья {article} — {header}\n{text[:700]}")
 
         return "\n\n".join(parts)
+
 
     def _postprocess(self, text: str) -> str:
 
         if not text:
             return "Недостаточно данных."
 
-        text = re.sub(r"<.*?>", "", text)
+        text = re.sub(r"<.*?>", "", text).strip()
 
         text = re.sub(r"(?i)^(a|answer|ответ):\s*", "", text)
 
-        text = re.sub(
-            r"(?i)(нужно ответить|сначала|важно|убеждаюсь|let'?s|okay|i need).*",
-            "",
-            text
-        )
+        text = re.sub(r"\n{2,}", "\n", text)
+        text = re.sub(r"[ \t]+", " ", text).strip()
 
-        text = re.sub(r"^\s*[-•*]\s+", "", text, flags=re.MULTILINE)
-
-        text = re.sub(r"\s+", " ", text).strip()
-
-        if len(text.split()) < 4:
+        if len(text.split()) < 6:
             return "Недостаточно данных."
 
         return text
