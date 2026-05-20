@@ -8,6 +8,7 @@ import math
 import re
 
 from sentence_transformers import CrossEncoder
+
 from rag.search_result import SearchResult
 
 
@@ -28,24 +29,29 @@ class Reranker(BaseReranker):
 
     def __init__(
         self,
-        model_name: str = "Qwen/Qwen3-Reranker-0.6B",
+        model_name: str = "BAAI/bge-reranker-v2-m3",
         batch_size: int = 8,
-        max_length: int = 512,
+        max_length: int = 768,
         top_n: int = 5,
 
-        rerank_weight: float = 0.60,
-        dense_weight: float = 0.30,
-        lexical_weight: float = 0.10,
+        rerank_weight: float = 0.40,
+        dense_weight: float = 0.45,
+        lexical_weight: float = 0.15,
 
-        exact_header_boost: float = 0.30,
-        partial_header_boost: float = 0.15,
+        exact_header_boost: float = 0.20,
+        partial_header_boost: float = 0.10,
+        definition_boost: float = 0.20,
+
         generic_header_penalty: float = 0.03,
         low_lexical_penalty: float = 0.02,
 
-        max_chunks_per_article: int = 2,
+        max_chunks_per_article: int = 3,
     ):
 
-        self.model = self._load(model_name, max_length)
+        self.model = self._load(
+            model_name=model_name,
+            max_length=max_length
+        )
 
         self.batch_size = batch_size
         self.max_length = max_length
@@ -57,6 +63,7 @@ class Reranker(BaseReranker):
 
         self.exact_header_boost = exact_header_boost
         self.partial_header_boost = partial_header_boost
+        self.definition_boost = definition_boost
 
         self.generic_header_penalty = generic_header_penalty
         self.low_lexical_penalty = low_lexical_penalty
@@ -64,17 +71,30 @@ class Reranker(BaseReranker):
         self.max_chunks_per_article = max_chunks_per_article
 
 
+
     @staticmethod
     @lru_cache(maxsize=1)
-    def _load(model_name: str, max_length: int) -> CrossEncoder:
-        model = CrossEncoder(model_name, max_length=max_length)
+    def _load(
+        model_name: str,
+        max_length: int
+    ) -> CrossEncoder:
+
+        model = CrossEncoder(
+            model_name,
+            max_length=max_length
+        )
 
         tokenizer = model.tokenizer
+
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        model.model.config.pad_token_id = tokenizer.pad_token_id
+        model.model.config.pad_token_id = (
+            tokenizer.pad_token_id
+        )
+
         return model
+
 
     def rerank(
         self,
@@ -87,110 +107,246 @@ class Reranker(BaseReranker):
             return []
 
         query = (query or "").strip()
+
         if not query:
             return []
 
         top_n = top_n or self.top_n
 
-        valid_hits = [h for h in hits if h.text and h.text.strip()]
+        valid_hits = [
+            h for h in hits
+            if h.text and h.text.strip()
+        ]
+
         if not valid_hits:
             return []
 
-        pairs = [self._build_pair(query, h) for h in valid_hits]
+        pairs = [
+            self._build_pair(query, h)
+            for h in valid_hits
+        ]
 
-        raw_scores = self.model.predict(
-            pairs,
-            batch_size=self.batch_size,
-            show_progress_bar=False,
-            convert_to_numpy=True
-        )
+        try:
 
-        scored: List[SearchResult] = []
+            raw_scores = self.model.predict(
+                pairs,
+                batch_size=self.batch_size,
+                show_progress_bar=False,
+                convert_to_numpy=True
+            )
 
-        for hit, raw in zip(valid_hits, raw_scores):
+        except Exception as e:
 
-            rerank_score = self._normalize_logit(raw)
-            dense_score = self._normalize_dense(getattr(hit, "score", 0.0))
-            lexical_score = self._lexical_score(query, hit.text or "")
+            print(f"[RERANK ERROR] {e}")
 
-            header = (hit.payload or {}).get("header", "")
+            return sorted(
+                valid_hits,
+                key=lambda x: getattr(x, "score", 0.0),
+                reverse=True
+            )[:top_n]
 
-            header_score = self._header_score(query, header)
-            penalty = self._penalty_score(query, header, hit.text or "")
+        scored_hits: List[SearchResult] = []
+
+        for hit, raw_score in zip(
+            valid_hits,
+            raw_scores
+        ):
+
+            rerank_score = self._normalize_logit(
+                raw_score
+            )
+
+            dense_score = self._normalize_dense(
+                getattr(hit, "score", 0.0)
+            )
+
+            lexical_score = self._lexical_score(
+                query=query,
+                text=hit.text or ""
+            )
+
+            payload = hit.payload or {}
+
+            header = payload.get(
+                "header",
+                ""
+            )
+
+            header_score = self._header_score(
+                query=query,
+                header=header
+            )
+
+            definition_score = self._definition_score(
+                query=query,
+                text=hit.text or "",
+                header=header
+            )
+
+            penalty = self._penalty_score(
+                query=query,
+                header=header,
+                text=hit.text or ""
+            )
 
             final_score = (
                 self.rerank_weight * rerank_score +
                 self.dense_weight * dense_score +
                 self.lexical_weight * lexical_score +
-                header_score -
+                header_score +
+                definition_score -
                 penalty
             )
 
-            scored.append(
-                SearchResult.from_rerank(hit, final_score)
+            scored_hits.append(
+                SearchResult.from_rerank(
+                    base=hit,
+                    score=final_score
+                )
             )
 
-        scored.sort(key=lambda x: x.score, reverse=True)
+        scored_hits.sort(
+            key=lambda x: x.score,
+            reverse=True
+        )
 
-        # ❗ ВАЖНО: только diversity, без threshold filter
-        diversified = self._diversify(scored, top_n)
+        diversified = self._diversify(
+            scored_hits,
+            top_n=top_n
+        )
 
         return diversified[:top_n]
 
-    # =========================
-    # PAIR BUILD
-    # =========================
 
-    def _build_pair(self, query: str, doc: SearchResult) -> Tuple[str, str]:
+    def _build_pair(
+        self,
+        query: str,
+        doc: SearchResult
+    ) -> Tuple[str, str]:
 
-        p = doc.payload or {}
+        payload = doc.payload or {}
 
-        article = p.get("article_number", "")
-        header = p.get("header", "")
-        text = self._prepare_text(doc.text)
+        article = payload.get(
+            "article_number",
+            ""
+        )
 
-        doc_text = f"""
+        header = payload.get(
+            "header",
+            ""
+        )
+
+        text = self._prepare_text(
+            doc.text
+        )
+
+        enriched = f"""
         Статья: {article}
-        Заголовок: {header}
-        Текст: {text}
+
+        Заголовок:
+        {header}
+
+        Текст:
+        {text}
         """.strip()
 
-        return query, doc_text
+        return (
+            query.strip(),
+            enriched
+        )
 
-    def _prepare_text(self, text: str) -> str:
+
+    def _prepare_text(
+        self,
+        text: str
+    ) -> str:
+
         text = (text or "").strip()
-        text = re.sub(r"\s+", " ", text)
 
-        if len(text) <= 2000:
+        text = re.sub(
+            r"\s+",
+            " ",
+            text
+        )
+
+        if len(text) <= 1800:
             return text
 
-        return text[:1400] + "\n...\n" + text[-400:]
+        head = text[:1200]
+        tail = text[-400:]
+
+        return f"{head}\n...\n{tail}"
 
 
-    def _normalize_logit(self, x: float) -> float:
-        return float(math.tanh(float(x) / 2.0))
+    def _normalize_logit(
+        self,
+        score: float
+    ) -> float:
 
-    def _normalize_dense(self, x: float) -> float:
-        return max(0.0, min(1.0, float(x)))
+        score = float(score)
+
+        return float(
+            math.tanh(score / 2.0)
+        )
 
 
-    def _tokenize(self, text: str) -> List[str]:
+    def _normalize_dense(
+        self,
+        score: float
+    ) -> float:
+
+        return max(
+            0.0,
+            min(1.0, float(score))
+        )
+
+
+    def _tokenize(
+        self,
+        text: str
+    ) -> List[str]:
+
         return [
-            w for w in re.findall(r"\w+", text.lower())
+            w for w in re.findall(
+                r"\w+",
+                text.lower()
+            )
             if len(w) > 2
         ]
 
-    def _lexical_score(self, query: str, text: str) -> float:
-        q = set(self._tokenize(query))
-        t = set(self._tokenize(text[:800]))
 
-        if not q:
+    def _lexical_score(
+        self,
+        query: str,
+        text: str
+    ) -> float:
+
+        query_words = set(
+            self._tokenize(query)
+        )
+
+        text_words = set(
+            self._tokenize(text[:800])
+        )
+
+        if not query_words:
             return 0.0
 
-        return len(q & t) / len(q)
+        overlap = (
+            query_words & text_words
+        )
+
+        return (
+            len(overlap) /
+            len(query_words)
+        )
 
 
-    def _header_score(self, query: str, header: str) -> float:
+    def _header_score(
+        self,
+        query: str,
+        header: str
+    ) -> float:
 
         q = query.lower().strip()
         h = (header or "").lower().strip()
@@ -204,30 +360,110 @@ class Reranker(BaseReranker):
         if q in h:
             return self.partial_header_boost
 
-        q_tokens = set(self._tokenize(q))
-        h_tokens = set(self._tokenize(h))
+        q_words = set(
+            self._tokenize(q)
+        )
 
-        if not q_tokens:
+        h_words = set(
+            self._tokenize(h)
+        )
+
+        if not q_words:
             return 0.0
 
-        return (len(q_tokens & h_tokens) / len(q_tokens)) * 0.15
+        overlap = (
+            q_words & h_words
+        )
+
+        ratio = (
+            len(overlap) /
+            len(q_words)
+        )
+
+        return ratio * 0.10
 
 
-    def _penalty_score(self, query: str, header: str, text: str) -> float:
+    def _definition_score(
+        self,
+        query: str,
+        text: str,
+        header: str
+    ) -> float:
+
+        query_lower = query.lower()
+
+        triggers = [
+            "что такое",
+            "понятие",
+            "определение",
+        ]
+
+        if not any(
+            t in query_lower
+            for t in triggers
+        ):
+            return 0.0
+
+        score = 0.0
+
+        text_lower = text.lower()
+        header_lower = header.lower()
+
+        legal_patterns = [
+            "это",
+            "является",
+            "признается",
+            "понимается",
+        ]
+
+        if any(
+            p in text_lower[:300]
+            for p in legal_patterns
+        ):
+            score += 0.15
+
+        if "понятие" in header_lower:
+            score += 0.10
+
+        return min(
+            score,
+            self.definition_boost
+        )
+
+
+    def _penalty_score(
+        self,
+        query: str,
+        header: str,
+        text: str
+    ) -> float:
 
         penalty = 0.0
 
-        generic = {
+        generic_headers = {
             "общие положения",
-            "понятие",
             "краткое содержание",
+            "практическое значение",
         }
 
-        if (header or "").lower().strip() in generic:
-            penalty += self.generic_header_penalty
+        header_lower = (
+            header or ""
+        ).lower().strip()
 
-        if self._lexical_score(query, text) < 0.1:
-            penalty += self.low_lexical_penalty
+        if header_lower in generic_headers:
+            penalty += (
+                self.generic_header_penalty
+            )
+
+        lexical = self._lexical_score(
+            query=query,
+            text=text
+        )
+
+        if lexical < 0.10:
+            penalty += (
+                self.low_lexical_penalty
+            )
 
         return penalty
 
@@ -239,32 +475,87 @@ class Reranker(BaseReranker):
     ) -> List[SearchResult]:
 
         selected = []
-        counts = {}
 
-        for h in hits:
+        article_counts = {}
 
-            article = (h.payload or {}).get("article_number", "unknown")
+        for hit in hits:
 
-            if counts.get(article, 0) >= self.max_chunks_per_article:
+            article = (
+                hit.payload or {}
+            ).get(
+                "article_number",
+                "unknown"
+            )
+
+            count = article_counts.get(
+                article,
+                0
+            )
+
+            if count >= self.max_chunks_per_article:
                 continue
 
-            selected.append(h)
-            counts[article] = counts.get(article, 0) + 1
+            selected.append(hit)
+
+            article_counts[article] = (
+                count + 1
+            )
 
             if len(selected) >= top_n:
                 break
 
         return selected
 
+    def debug_rerank(
+        self,
+        query: str,
+        hits: List[SearchResult],
+        top_n: int = 10
+    ):
 
-    def debug_rerank(self, query: str, hits: List[SearchResult], top_n: int = 10):
-        print("\n" + "=" * 80)
-        print(f"RERANK DEBUG: {query}")
-        print("=" * 80)
+        print("\n" + "=" * 100)
 
-        ranked = self.rerank(query, hits, top_n=top_n)
+        print("[RERANK DEBUG]")
 
-        for i, h in enumerate(ranked, 1):
-            p = h.payload or {}
-            print(f"\n[{i}] score={h.score:.4f} article={p.get('article_number')}")
-            print(p.get("header"))
+        print(f"QUERY: {query}")
+
+        print("=" * 100)
+
+        ranked = self.rerank(
+            query=query,
+            hits=hits,
+            top_n=top_n
+        )
+
+        for idx, hit in enumerate(
+            ranked,
+            start=1
+        ):
+
+            payload = hit.payload or {}
+
+            print(f"\n[{idx}]")
+
+            print(
+                f"SCORE   : "
+                f"{hit.score:.4f}"
+            )
+
+            print(
+                f"ARTICLE : "
+                f"{payload.get('article_number')}"
+            )
+
+            print(
+                f"HEADER  : "
+                f"{payload.get('header')}"
+            )
+
+            print("\nTEXT:")
+            print("-" * 80)
+
+            print(
+                (hit.text or "")[:1000]
+            )
+
+            print("-" * 80)
