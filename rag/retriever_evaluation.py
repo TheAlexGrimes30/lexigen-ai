@@ -1,4 +1,5 @@
 import json
+import math
 from typing import List
 
 import pandas as pd
@@ -23,6 +24,19 @@ def unique_preserve_order(
     return result
 
 
+def hit_rate_at_k(
+    retrieved: List[int],
+    relevant: List[int]
+) -> float:
+
+    if not relevant:
+        return 0.0
+
+    return float(
+        len(set(retrieved[:len(retrieved)]) & set(relevant)) > 0
+    )
+
+
 def recall_at_k(
     retrieved: List[int],
     relevant: List[int]
@@ -31,9 +45,11 @@ def recall_at_k(
     if not relevant:
         return 0.0
 
-    hits = set(retrieved) & set(relevant)
+    hits = len(
+        set(retrieved) & set(relevant)
+    )
 
-    return float(len(hits) > 0)
+    return hits / len(relevant)
 
 
 def precision_at_k(
@@ -44,13 +60,13 @@ def precision_at_k(
     if not retrieved:
         return 0.0
 
-    hits = sum(
-        1
-        for article in retrieved
-        if article in relevant
+    retrieved_unique = set(retrieved)
+
+    hits = len(
+        retrieved_unique & set(relevant)
     )
 
-    return hits / len(retrieved)
+    return hits / len(retrieved_unique)
 
 
 def mrr_at_k(
@@ -58,31 +74,99 @@ def mrr_at_k(
     relevant: List[int]
 ) -> float:
 
-    for i, article in enumerate(retrieved):
+    for rank, article in enumerate(retrieved, start=1):
 
         if article in relevant:
-            return 1.0 / (i + 1)
+
+            return 1.0 / rank
 
     return 0.0
+
+
+def dcg_at_k(
+    retrieved: List[int],
+    relevant: List[int]
+) -> float:
+
+    dcg = 0.0
+
+    for rank, article in enumerate(retrieved, start=1):
+
+        if article in relevant:
+
+            dcg += 1.0 / math.log2(rank + 1)
+
+    return dcg
+
+
+def ideal_dcg_at_k(
+    num_relevant: int,
+    k: int
+) -> float:
+
+    ideal_hits = min(num_relevant, k)
+
+    return sum(
+        1.0 / math.log2(rank + 1)
+        for rank in range(1, ideal_hits + 1)
+    )
+
+
+def ndcg_at_k(
+    retrieved: List[int],
+    relevant: List[int]
+) -> float:
+
+    if not relevant:
+        return 0.0
+
+    dcg = dcg_at_k(
+        retrieved,
+        relevant
+    )
+
+    idcg = ideal_dcg_at_k(
+        num_relevant=len(relevant),
+        k=len(retrieved)
+    )
+
+    if idcg == 0:
+        return 0.0
+
+    return dcg / idcg
 
 
 def evaluate_rag(
     rag,
     dataset,
-    output_path="rag_eval_results.json"
+    output_path="rag_eval_results.json",
+
+    use_reranker=True,
+
+    retrieve_top_k=20,
+    rerank_top_n=5
 ):
 
     results = []
 
     metrics = {
+
+        "hit_rate": [],
         "recall": [],
         "precision": [],
-        "mrr": []
+        "mrr": [],
+        "ndcg": []
     }
 
-    print("\n" + "=" * 80)
+    print("\n" + "=" * 100)
+
     print("STARTING DATASET EVALUATION")
-    print("=" * 80)
+
+    print("=" * 100)
+
+    print(f"\nRERANKER ENABLED: {use_reranker}")
+    print(f"RETRIEVE TOP-K: {retrieve_top_k}")
+    print(f"FINAL TOP-N: {rerank_top_n}")
 
     for item in dataset:
 
@@ -98,22 +182,22 @@ def evaluate_rag(
             []
         )
 
-        print("\n" + "-" * 80)
+        print("\n" + "-" * 100)
+
         print(f"QUERY: {query}")
 
-        hits = rag.retriever.retrieve(
+        hits = rag.search(
             query=query,
-            top_k=10
+            retrieve_top_k=retrieve_top_k,
+            rerank_top_n=rerank_top_n,
+            use_reranker=use_reranker
         )
 
-        retrieved_articles = []
+        retrieved_articles_raw = []
 
         retrieved_chunks = []
 
-        for rank, h in enumerate(
-            hits,
-            start=1
-        ):
+        for rank, h in enumerate(hits, start=1):
 
             article = None
 
@@ -129,7 +213,7 @@ def evaluate_rag(
 
                     article = int(article)
 
-                    retrieved_articles.append(
+                    retrieved_articles_raw.append(
                         article
                     )
 
@@ -151,74 +235,88 @@ def evaluate_rag(
                     (h.text or "")[:1500]
             })
 
-        # IMPORTANT:
-        # remove duplicate articles
-        # while preserving ranking order
 
-        unique_articles = (
+        retrieved_articles = (
             unique_preserve_order(
-                retrieved_articles
+                retrieved_articles_raw
             )
         )
 
-        # METRICS
+
+        retrieved_articles = (
+            retrieved_articles[:rerank_top_n]
+        )
+
+
+        hit_rate = hit_rate_at_k(
+            retrieved_articles,
+            relevant_articles
+        )
 
         recall = recall_at_k(
-            unique_articles,
+            retrieved_articles,
             relevant_articles
         )
 
         precision = precision_at_k(
-            unique_articles,
+            retrieved_articles,
             relevant_articles
         )
 
         mrr = mrr_at_k(
-            unique_articles,
+            retrieved_articles,
             relevant_articles
         )
 
-        metrics["recall"].append(
-            recall
+        ndcg = ndcg_at_k(
+            retrieved_articles,
+            relevant_articles
         )
 
-        metrics["precision"].append(
-            precision
-        )
+        metrics["hit_rate"].append(hit_rate)
+        metrics["recall"].append(recall)
+        metrics["precision"].append(precision)
+        metrics["mrr"].append(mrr)
+        metrics["ndcg"].append(ndcg)
 
-        metrics["mrr"].append(
-            mrr
-        )
 
-        print(
-            f"RELEVANT: "
-            f"{relevant_articles}"
-        )
+        print(f"RELEVANT: {relevant_articles}")
 
         print(
             f"RETRIEVED RAW: "
-            f"{retrieved_articles}"
+            f"{retrieved_articles_raw}"
         )
 
         print(
             f"RETRIEVED UNIQUE: "
-            f"{unique_articles}"
+            f"{retrieved_articles}"
         )
 
         print(
-            f"RECALL@5: "
+            f"HITRATE@{rerank_top_n}: "
+            f"{hit_rate:.4f}"
+        )
+
+        print(
+            f"RECALL@{rerank_top_n}: "
             f"{recall:.4f}"
         )
 
         print(
-            f"PRECISION@5: "
+            f"PRECISION@{rerank_top_n}: "
             f"{precision:.4f}"
         )
 
         print(
-            f"MRR@5: "
+            f"MRR@{rerank_top_n}: "
             f"{mrr:.4f}"
         )
+
+        print(
+            f"nDCG@{rerank_top_n}: "
+            f"{ndcg:.4f}"
+        )
+
 
         results.append({
 
@@ -232,51 +330,54 @@ def evaluate_rag(
                 hard_negatives,
 
             "retrieved_articles_raw":
-                retrieved_articles,
+                retrieved_articles_raw,
 
             "retrieved_articles_unique":
-                unique_articles,
+                retrieved_articles,
 
-            "recall@5":
+            f"hit_rate@{rerank_top_n}":
+                hit_rate,
+
+            f"recall@{rerank_top_n}":
                 recall,
 
-            "precision@5":
+            f"precision@{rerank_top_n}":
                 precision,
 
-            "mrr@5":
+            f"mrr@{rerank_top_n}":
                 mrr,
+
+            f"ndcg@{rerank_top_n}":
+                ndcg,
 
             "retrieved_chunks":
                 retrieved_chunks
         })
 
+
     report = {
 
-        "recall@5":
-            round(
-                sum(metrics["recall"])
-                / len(dataset),
-                4
-            ),
+        f"hit_rate@{rerank_top_n}":
+            round(sum(metrics["hit_rate"]) / len(dataset), 4),
 
-        "precision@5":
-            round(
-                sum(metrics["precision"])
-                / len(dataset),
-                4
-            ),
+        f"recall@{rerank_top_n}":
+            round(sum(metrics["recall"]) / len(dataset), 4),
 
-        "mrr@5":
-            round(
-                sum(metrics["mrr"])
-                / len(dataset),
-                4
-            )
+        f"precision@{rerank_top_n}":
+            round(sum(metrics["precision"]) / len(dataset), 4),
+
+        f"mrr@{rerank_top_n}":
+            round(sum(metrics["mrr"]) / len(dataset), 4),
+
+        f"ndcg@{rerank_top_n}":
+            round(sum(metrics["ndcg"]) / len(dataset), 4)
     }
 
-    print("\n" + "=" * 80)
-    print("FINAL RETRIEVER METRICS")
-    print("=" * 80)
+    print("\n" + "=" * 100)
+
+    print("FINAL RETRIEVAL METRICS")
+
+    print("=" * 100)
 
     print(
         json.dumps(
@@ -288,7 +389,19 @@ def evaluate_rag(
 
     output = {
 
-        "retriever_metrics":
+        "config": {
+
+            "use_reranker":
+                use_reranker,
+
+            "retrieve_top_k":
+                retrieve_top_k,
+
+            "rerank_top_n":
+                rerank_top_n
+        },
+
+        "retrieval_metrics":
             report,
 
         "samples":
@@ -308,38 +421,7 @@ def evaluate_rag(
             indent=4
         )
 
-    # CSV export
-
-    csv_rows = []
-
-    for sample in results:
-
-        csv_rows.append({
-
-            "question":
-                sample["question"],
-
-            "relevant_articles":
-                sample[
-                    "relevant_articles"
-                ],
-
-            "retrieved_articles_unique":
-                sample[
-                    "retrieved_articles_unique"
-                ],
-
-            "recall@5":
-                sample["recall@5"],
-
-            "precision@5":
-                sample["precision@5"],
-
-            "mrr@5":
-                sample["mrr@5"]
-        })
-
-    pd.DataFrame(csv_rows).to_csv(
+    pd.DataFrame(results).to_csv(
 
         output_path.replace(
             ".json",
@@ -350,6 +432,4 @@ def evaluate_rag(
         encoding="utf-8"
     )
 
-    print(
-        f"\nSaved -> {output_path}"
-    )
+    print(f"\nSaved -> {output_path}")

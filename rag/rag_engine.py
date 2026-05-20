@@ -1,24 +1,44 @@
-# main.py
+from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance
 
-from rag.dense_retriever import Embedder, Retriever
-from rag.index_service import IndexService
+from rag.dense_retriever import (
+    Embedder,
+    Retriever
+)
+
+from rag.reranker import (
+    Reranker
+)
+
+from rag.index_service import (
+    IndexService
+)
+
 from rag.ingestion import (
     MarkdownDocumentLoader,
     IngestionPipeline,
     IngestionService,
 )
 
-from rag.rag_chunkers import HybridLegalChunker
-from rag.retriever_dataset import dataset
-from rag.retriever_evaluation import evaluate_rag
-from rag.storage import VectorStore
+from rag.rag_chunkers import (
+    HybridLegalChunker
+)
 
+from rag.retriever_dataset import (
+    dataset
+)
+
+from rag.retriever_evaluation import (
+    evaluate_rag
+)
+
+from rag.storage import (
+    VectorStore
+)
 
 
 class RAG:
@@ -26,13 +46,17 @@ class RAG:
     def __init__(self):
 
         base_path = Path(__file__).resolve()
+
         project_root = base_path.parents[1]
 
-        rag_db_path = project_root / "rag_db"
+        rag_db_path = (
+            project_root / "rag_db"
+        )
 
         self.debug_path = (
             project_root / "debug"
         )
+
 
         loader = MarkdownDocumentLoader(
             str(rag_db_path)
@@ -68,33 +92,46 @@ class RAG:
 
         self.vector_store.ensure_collection()
 
+        # INDEX
+
         self.index_service = IndexService(
             vector_store=self.vector_store,
             embedder=self.embedder
         )
 
-        # FIXED
+
         self.retriever = Retriever(
             vector_store=self.vector_store,
             embedder=self.embedder,
-            max_pool_size=20
+            max_pool_size=50
+        )
+
+
+        self.reranker = Reranker(
+            model_name="Qwen/Qwen3-Reranker-0.6B",
+            top_n=5
         )
 
     def build_and_index(self):
 
         print("\nLoading chunks...\n")
 
-        chunks = self.ingestion.load_chunks()
+        chunks = (
+            self.ingestion.load_chunks()
+        )
 
-        print(f"Loaded chunks: {len(chunks)}")
-
-        # self.save_chunks(chunks)
+        print(
+            f"Loaded chunks: {len(chunks)}"
+        )
 
         self.index_if_needed(chunks)
 
         return chunks
 
-    def index_if_needed(self, chunks):
+    def index_if_needed(
+        self,
+        chunks
+    ):
 
         collection = (
             self.vector_store.collection_name
@@ -126,73 +163,43 @@ class RAG:
 
         print("[Index] Done indexing")
 
-    def save_chunks(
-        self,
-        chunks,
-        filename: str = "chunks.json"
-    ):
-
-        self.debug_path.mkdir(
-            parents=True,
-            exist_ok=True
-        )
-
-        output_file = (
-            self.debug_path / filename
-        )
-
-        data = []
-
-        for chunk in chunks:
-
-            data.append({
-                "chunk_id": chunk.chunk_id,
-                "text": chunk.text,
-                "metadata": {
-                    "source": chunk.metadata.source,
-                    "file": chunk.metadata.file,
-                    "header": chunk.metadata.header,
-                    "level": chunk.metadata.level,
-                    "article_number": (
-                        chunk.metadata.article_number
-                    ),
-                    "chunk_index": (
-                        chunk.metadata.chunk_index
-                    ),
-                    "topics": (
-                        chunk.metadata.topics
-                    )
-                }
-            })
-
-        with open(
-            output_file,
-            "w",
-            encoding="utf-8"
-        ) as f:
-
-            json.dump(
-                data,
-                f,
-                ensure_ascii=False,
-                indent=2
-            )
-
-        print(
-            f"\n[DEBUG] "
-            f"Chunks saved: "
-            f"{output_file.resolve()}"
-        )
-
-    def debug_retriever(
+    def search(
         self,
         query: str,
-        top_k: int = 5
+        retrieve_top_k: int = 20,
+        rerank_top_n: int = 5,
+        use_reranker: bool = True
     ):
 
-        print("\n" + "=" * 80)
+        hits = self.retriever.retrieve(
+            query=query,
+            top_k=retrieve_top_k
+        )
+
+        if not use_reranker:
+            return hits[:rerank_top_n]
+
+        reranked = self.reranker.rerank(
+            query=query,
+            hits=hits,
+            top_n=rerank_top_n
+        )
+
+        return reranked
+
+    def debug_dense_retrieval(
+        self,
+        query: str,
+        top_k: int = 10
+    ):
+
+        print("\n" + "=" * 100)
+
+        print("[DENSE RETRIEVAL DEBUG]")
 
         print(f"QUERY: {query}")
+
+        print("=" * 100)
 
         hits = self.retriever.retrieve(
             query=query,
@@ -201,7 +208,7 @@ class RAG:
 
         if not hits:
 
-            print("No results")
+            print("No hits")
 
             return
 
@@ -210,32 +217,165 @@ class RAG:
             start=1
         ):
 
-            article = (
-                hit.payload.get("article_number")
-                if hit.payload
-                else None
+            payload = hit.payload or {}
+
+            article = payload.get(
+                "article_number",
+                "unknown"
             )
 
-            print("\n" + "-" * 80)
+            header = payload.get(
+                "header",
+                "unknown"
+            )
 
-            print(f"TOP {i}")
+            print("\n" + "-" * 100)
 
-            print(f"ARTICLE: {article}")
+            print(f"DENSE TOP {i}")
 
             print(
-                f"SCORE: "
+                f"SCORE   : "
                 f"{hit.score:.4f}"
+            )
+
+            print(
+                f"ARTICLE : "
+                f"{article}"
+            )
+
+            print(
+                f"HEADER  : "
+                f"{header}"
             )
 
             print("\nTEXT:\n")
 
             print(
-                (hit.text or "")[:1000]
+                (hit.text or "")[:1200]
+            )
+
+    def debug_search_pipeline(
+        self,
+        query: str,
+        retrieve_top_k: int = 20,
+        rerank_top_n: int = 5
+    ):
+
+        print("\n" + "=" * 100)
+
+        print("[FULL SEARCH PIPELINE DEBUG]")
+
+        print(f"QUERY: {query}")
+
+        print("=" * 100)
+
+        dense_hits = self.retriever.retrieve(
+            query=query,
+            top_k=retrieve_top_k
+        )
+
+        print("\n" + "=" * 100)
+
+        print("DENSE RETRIEVER RESULTS")
+
+        print("=" * 100)
+
+        for i, hit in enumerate(
+            dense_hits,
+            start=1
+        ):
+
+            payload = hit.payload or {}
+
+            print("\n" + "-" * 100)
+
+            print(f"DENSE TOP {i}")
+
+            print(
+                f"SCORE   : "
+                f"{hit.score:.4f}"
+            )
+
+            print(
+                f"ARTICLE : "
+                f"{payload.get('article_number')}"
+            )
+
+            print(
+                f"HEADER  : "
+                f"{payload.get('header')}"
+            )
+
+        print("\n" + "=" * 100)
+
+        print("RERANKER DEBUG")
+
+        print("=" * 100)
+
+        self.reranker.debug_rerank(
+            query=query,
+            hits=dense_hits,
+            top_n=rerank_top_n
+        )
+
+        print("\n" + "=" * 100)
+
+        print("FINAL RERANKED RESULTS")
+
+        print("=" * 100)
+
+        final_hits = self.reranker.rerank(
+            query=query,
+            hits=dense_hits,
+            top_n=rerank_top_n
+        )
+
+        for i, hit in enumerate(
+            final_hits,
+            start=1
+        ):
+
+            payload = hit.payload or {}
+
+            article = payload.get(
+                "article_number",
+                "unknown"
+            )
+
+            header = payload.get(
+                "header",
+                "unknown"
+            )
+
+            print("\n" + "-" * 100)
+
+            print(f"FINAL TOP {i}")
+
+            print(
+                f"FINAL SCORE : "
+                f"{hit.score:.4f}"
+            )
+
+            print(
+                f"ARTICLE     : "
+                f"{article}"
+            )
+
+            print(
+                f"HEADER      : "
+                f"{header}"
+            )
+
+            print("\nTEXT:\n")
+
+            print(
+                (hit.text or "")[:1200]
             )
 
     def close(self):
 
         print("\nShutting down...")
+
 
 
 if __name__ == "__main__":
@@ -248,41 +388,87 @@ if __name__ == "__main__":
 
         print("\nDone.\n")
 
+        queries = [
 
-        rag.debug_retriever(
-            query="что такое акцепт в гражданском праве",
-            top_k=5
-        )
+            "что такое акцепт в гражданском праве",
 
-        rag.debug_retriever(
-            query="что такое субсидиарная ответственность",
-            top_k=5
-        )
+            "что такое субсидиарная ответственность",
 
-        rag.debug_retriever(
-            query="что такое солидарная ответственность",
-            top_k=5
-        )
+            "что такое солидарная ответственность",
 
-        rag.debug_retriever(
-            query="что такое обязательство",
-            top_k=5
-        )
+            "что такое обязательство",
+        ]
 
 
-        print("\n" + "=" * 80)
+        print("\n" + "=" * 100)
+
+        print("DENSE RETRIEVAL ONLY")
+
+        print("=" * 100)
+
+        for q in queries:
+
+            rag.debug_dense_retrieval(
+                query=q,
+                top_k=10
+            )
+
+        print("\n" + "=" * 100)
+
+        print("FULL SEARCH PIPELINE")
+
+        print("=" * 100)
+
+        for q in queries:
+
+            rag.debug_search_pipeline(
+                query=q,
+                retrieve_top_k=20,
+                rerank_top_n=5
+            )
+
+        print("\n" + "=" * 100)
 
         print(
             "STARTING "
-            "RETRIEVER EVALUATION"
+            "BASELINE EVALUATION"
         )
 
-        print("=" * 80)
+        print("=" * 100)
 
         evaluate_rag(
             rag=rag,
             dataset=dataset,
-            output_path="rag_eval_results.json"
+
+            output_path="baseline_eval.json",
+
+            use_reranker=False,
+
+            retrieve_top_k=20,
+
+            rerank_top_n=5
+        )
+
+        print("\n" + "=" * 100)
+
+        print(
+            "STARTING "
+            "RERANK EVALUATION"
+        )
+
+        print("=" * 100)
+
+        evaluate_rag(
+            rag=rag,
+            dataset=dataset,
+
+            output_path="rerank_eval.json",
+
+            use_reranker=True,
+
+            retrieve_top_k=20,
+
+            rerank_top_n=5
         )
 
     finally:

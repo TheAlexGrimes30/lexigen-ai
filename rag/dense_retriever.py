@@ -343,19 +343,24 @@ class Retriever(BaseRetriever):
         return result
 
     def debug_query(
-        self,
-        query: str,
-        top_k: int = 10
+            self,
+            query: str,
+            top_k: int = 10
     ):
 
-        print("\n" + "=" * 80)
+        print("\n" + "=" * 100)
 
-        print(f"[QUERY] {query}")
+        print(f"[DENSE RETRIEVAL DEBUG]")
+
+        print(f"QUERY: {query}")
+
+        print("=" * 100)
 
         query = (query or "").strip()
 
         if not query:
             print("Empty query")
+
             return
 
         query_vec = self.embedder.encode_queries(
@@ -367,16 +372,55 @@ class Retriever(BaseRetriever):
             k=top_k
         )
 
-        print(f"\n[DENSE TOP {top_k}]")
+        hits = self._basic_filter(hits)
 
-        for i, h in enumerate(hits, start=1):
+        if not hits:
+            print("No hits")
 
-            print(
-                f"{i}. "
-                f"score={h.score:.4f} "
-                f"| id={h.id}"
+            return
+
+        for i, h in enumerate(
+                hits,
+                start=1
+        ):
+            payload = h.payload or {}
+
+            article = payload.get(
+                "article_number",
+                "unknown"
             )
 
-            print((h.text or "")[:400])
+            header = payload.get(
+                "header",
+                "unknown"
+            )
 
-            print()
+            print("\n" + "-" * 100)
+
+            print(f"TOP {i}")
+
+            print(
+                f"SCORE   : "
+                f"{h.score:.4f}"
+            )
+
+            print(
+                f"ARTICLE : "
+                f"{article}"
+            )
+
+            print(
+                f"HEADER  : "
+                f"{header}"
+            )
+
+            print(
+                f"ID      : "
+                f"{h.id}"
+            )
+
+            print("\nTEXT:\n")
+
+            print(
+                (h.text or "")[:1200]
+            )
