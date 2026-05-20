@@ -88,7 +88,7 @@ class QwenClient(BaseLLMClient):
             temperature=0.3,
             top_p=0.8,
             repeat_penalty=1.1,
-            max_tokens=200,
+            max_tokens=512,
 
             stop=[
                 "A:",
@@ -185,11 +185,22 @@ class Generator(BaseGenerator):
         if len(context) < 30:
             return "Недостаточно данных."
 
+        print("\n" + "=" * 100)
+        print("[GENERATOR CONTEXT]")
+        print("=" * 100)
+
+        print(context)
+
+        print("\n" + "=" * 100)
+        print("[END CONTEXT]")
+        print("=" * 100)
+
         prompt = self.prompt_builder.build(query, context)
 
         try:
             raw = self.llm.generate(prompt)
-        except Exception:
+        except Exception as e:
+            print(f"[GENERATION ERROR] {e}")
             return "Ошибка генерации ответа."
 
         return self._postprocess(raw)
