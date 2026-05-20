@@ -160,3 +160,62 @@ dataset = [
         "category": "contracts"
     }
 ]
+
+mini_dataset = [
+
+    {
+        "id": 1,
+        "question": "что такое обязательство в гражданском праве",
+        "relevant_articles": [307],
+        "hard_negatives": [322, 413, 438],
+        "category": "definitions"
+    },
+
+    {
+        "id": 2,
+        "question": "кто такой должник и кредитор и какие у них обязанности",
+        "relevant_articles": [307],
+        "hard_negatives": [399, 322, 413],
+        "category": "definitions"
+    },
+
+    {
+        "id": 3,
+        "question": "какие основания возникновения обязательств по гк рф",
+        "relevant_articles": [307],
+        "hard_negatives": [438, 452, 449],
+        "category": "general_definition"
+    },
+
+    {
+        "id": 4,
+        "question": "что такое субсидиарная ответственность и когда она применяется",
+        "relevant_articles": [399],
+        "hard_negatives": [322, 413, 307],
+        "category": "liability"
+    },
+
+    {
+        "id": 5,
+        "question": "когда кредитор может обратиться к субсидиарному должнику",
+        "relevant_articles": [399],
+        "hard_negatives": [307, 413, 452],
+        "category": "enforcement"
+    },
+
+    {
+        "id": 6,
+        "question": "что происходит если должник и кредитор совпадают в одном лице",
+        "relevant_articles": [413],
+        "hard_negatives": [399, 322, 438],
+        "category": "termination"
+    },
+
+    {
+        "id": 7,
+        "question": "в каких случаях обязательство прекращается по гк рф",
+        "relevant_articles": [413],
+        "hard_negatives": [307, 322, 452],
+        "category": "termination"
+    }
+]

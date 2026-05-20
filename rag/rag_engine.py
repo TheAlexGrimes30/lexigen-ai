@@ -29,7 +29,7 @@ from rag.rag_chunkers import (
 )
 
 from rag.retriever_dataset import (
-    dataset
+    dataset, mini_dataset
 )
 
 from rag.retriever_evaluation import (
@@ -259,7 +259,7 @@ if __name__ == "__main__":
 
         evaluate_rag(
             rag=rag,
-            dataset=dataset,
+            dataset=mini_dataset,
             output_path="rerank_eval.json",
             use_reranker=True,
             retrieve_top_k=20,
