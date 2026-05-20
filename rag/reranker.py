@@ -836,4 +836,3 @@ class Reranker(BaseReranker):
             )
 
             print("-" * 80)
-            

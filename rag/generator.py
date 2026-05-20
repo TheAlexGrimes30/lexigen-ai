@@ -53,12 +53,12 @@ class ContextCleaner(BaseContextCleaner):
 
 class QwenClient(BaseLLMClient):
 
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str = "models\Qwen3-8B-Q4_K_M.gguf"):
         self.llm = Llama(
             model_path=str(model_path),
             n_ctx=4096,
             n_threads=8,
-            verbose=False
+            verbose=True
         )
 
     def generate(self, prompt: str) -> str:
