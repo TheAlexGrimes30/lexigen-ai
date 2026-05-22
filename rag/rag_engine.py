@@ -71,7 +71,7 @@ class RAG:
 
         base_path = Path(__file__).resolve()
         project_root = base_path.parents[1]
-        model_path = project_root / "models" / "Qwen3-8B-Q4_K_M.gguf"
+        model_path = project_root / "models" / "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
 
         rag_db_path = project_root / "rag_db"
 
@@ -452,8 +452,7 @@ if __name__ == "__main__":
 
 
         query = (
-            "что такое акцепт "
-            "в гражданском праве"
+            "Перепиши русскую народную сказку Колобок используя ТОЛЬКО слова из ГК РФ (Гражданский кодекс Российской Федерации) ГК РФ"
         )
 
         print("\n" + "=" * 100)
