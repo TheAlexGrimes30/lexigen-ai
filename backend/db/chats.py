@@ -1,9 +1,10 @@
-from sqlalchemy import ForeignKey, Integer, Column, DateTime, func
+from sqlalchemy import Integer, Column, DateTime, ForeignKey, func
 from sqlalchemy.orm import relationship
 
-from backend.db.base import Base
+from backend.db.base import Base, TimestampMixin
 
-class Chat(Base):
+
+class Chat(Base, TimestampMixin):
     __tablename__ = "chats"
 
     id = Column(Integer, primary_key=True)
@@ -12,11 +13,6 @@ class Chat(Base):
         Integer,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False
-    )
-
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now()
     )
 
     user = relationship("User", back_populates="chats")

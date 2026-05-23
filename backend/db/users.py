@@ -1,10 +1,9 @@
 import enum
-from datetime import datetime, timezone
 
-from sqlalchemy import Column, Integer, String, Enum, DateTime, func
+from sqlalchemy import Integer, Column, String, DateTime, Enum, func
 from sqlalchemy.orm import relationship
 
-from backend.db.base import Base
+from backend.db.base import Base, TimestampMixin
 
 
 class UserRole(enum.Enum):
@@ -12,7 +11,7 @@ class UserRole(enum.Enum):
     ADMIN = "admin"
 
 
-class User(Base):
+class User(Base, TimestampMixin):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
@@ -24,11 +23,6 @@ class User(Base):
         Enum(UserRole, name="user_role"),
         default=UserRole.USER,
         nullable=False
-    )
-
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now()
     )
 
     subscriptions = relationship(

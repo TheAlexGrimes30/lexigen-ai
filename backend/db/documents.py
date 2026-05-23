@@ -1,8 +1,9 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, func
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, func, DateTime
 
-from backend.db.base import Base
+from backend.db.base import Base, TimestampMixin
 
-class Document(Base):
+
+class Document(Base, TimestampMixin):
     __tablename__ = "documents"
 
     id = Column(Integer, primary_key=True)
@@ -15,9 +16,4 @@ class Document(Base):
         Integer,
         ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True
-    )
-
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now()
     )

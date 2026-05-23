@@ -1,9 +1,10 @@
-from sqlalchemy import Column, Integer, ForeignKey, String, Boolean, DateTime
+from sqlalchemy import Integer, Column, ForeignKey, String, Boolean, DateTime
 from sqlalchemy.orm import relationship
 
-from backend.db.base import Base
+from backend.db.base import Base, TimestampMixin
 
-class Subscription(Base):
+
+class Subscription(Base, TimestampMixin):
     __tablename__ = "subscriptions"
 
     id = Column(Integer, primary_key=True)

@@ -1,9 +1,10 @@
 import enum
 
-from sqlalchemy import Column, Integer, Text, func, DateTime, ForeignKey, Enum as SAEnum, Index
+from sqlalchemy import ForeignKey, Integer, Column, Text, func, DateTime, Index, Enum as SAEnum
 from sqlalchemy.orm import relationship
 
 from backend.db.base import Base
+
 
 class MessageRole(enum.Enum):
     USER = "user"
