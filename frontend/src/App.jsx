@@ -1,15 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { createChat, deleteChat, fetchChats, fetchMessages, sendMessage } from "./api";
+import {
+  createChat,
+  deleteChat,
+  fetchChats,
+  fetchMe,
+  fetchMessages,
+  login,
+  register,
+  sendMessage,
+} from "./api";
 
-const NAV_ITEMS = [
-  { key: "home", label: "Главная" },
-  { key: "profile", label: "Личный кабинет" },
-  { key: "analytics", label: "Аналитика" },
-  { key: "chats", label: "Ваши чаты" },
-];
+const TOKEN_KEY = "lexigen_token";
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("home");
+  const [activeTab, setActiveTab] = useState("login");
+  const [authMode, setAuthMode] = useState("login");
+  const [authToken, setAuthToken] = useState(localStorage.getItem(TOKEN_KEY) || "");
+  const [currentUser, setCurrentUser] = useState(null);
+
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+
   const [chats, setChats] = useState([]);
   const [selectedChatId, setSelectedChatId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -23,32 +35,112 @@ export default function App() {
     [chats, selectedChatId]
   );
 
-  useEffect(() => {
-    loadChats();
-  }, []);
+  const navItems = useMemo(() => {
+    const items = [
+      { key: "home", label: "Главная" },
+      { key: "profile", label: "Личный кабинет" },
+      { key: "chats", label: "Ваши чаты" },
+    ];
+
+    if (currentUser?.role === "admin") {
+      items.splice(2, 0, { key: "analytics", label: "Аналитика" });
+    }
+
+    return items;
+  }, [currentUser]);
 
   useEffect(() => {
-    if (!selectedChatId) return;
-    loadMessages(selectedChatId);
-  }, [selectedChatId]);
+    if (!authToken) {
+      setCurrentUser(null);
+      setChats([]);
+      setMessages([]);
+      setSelectedChatId(null);
+      return;
+    }
 
-  async function loadChats() {
+    bootstrapSession();
+  }, [authToken]);
+
+  useEffect(() => {
+    if (!selectedChatId || !authToken) return;
+    loadMessages(selectedChatId, authToken);
+  }, [selectedChatId, authToken]);
+
+  async function bootstrapSession() {
     try {
       setError("");
-      const data = await fetchChats();
+      const user = await fetchMe(authToken);
+      setCurrentUser(user);
+      await loadChats(authToken);
+    } catch (e) {
+      clearSession();
+      setError(e.message || "Сессия истекла. Войдите заново.");
+    }
+  }
+
+  function clearSession() {
+    localStorage.removeItem(TOKEN_KEY);
+    setAuthToken("");
+    setCurrentUser(null);
+    setChats([]);
+    setMessages([]);
+    setSelectedChatId(null);
+    setActiveTab("home");
+  }
+
+  function handleLogout() {
+    clearSession();
+    setAuthMode("login");
+    setAuthPassword("");
+    setActiveTab("login");
+  }
+
+  async function handleAuthSubmit(e) {
+    e.preventDefault();
+
+    try {
+      setError("");
+      const payload =
+        authMode === "register"
+          ? { name: authName.trim(), email: authEmail.trim(), password: authPassword }
+          : { email: authEmail.trim(), password: authPassword };
+
+      const data = authMode === "register" ? await register(payload) : await login(payload);
+      localStorage.setItem(TOKEN_KEY, data.access_token);
+      setAuthToken(data.access_token);
+      setCurrentUser(data.user);
+      setAuthPassword("");
+      setAuthName("");
+      setActiveTab("chats");
+    } catch (e) {
+      setError(e.message || "Ошибка авторизации");
+    }
+  }
+
+  async function loadChats(token = authToken) {
+    if (!token) return;
+
+    try {
+      setError("");
+      const data = await fetchChats(token);
       setChats(data);
       if (!selectedChatId && data.length > 0) {
         setSelectedChatId(data[0].id);
+      }
+      if (selectedChatId && !data.find((c) => c.id === selectedChatId)) {
+        setSelectedChatId(data[0]?.id || null);
       }
     } catch (e) {
       setError(e.message || "Ошибка загрузки чатов");
     }
   }
 
-  async function loadMessages(chatId) {
+  async function loadMessages(chatId, token = authToken) {
+    if (!token) return;
+
     try {
       setError("");
-      const data = await fetchMessages(chatId);
+      const data = await fetchMessages(chatId, token);
       setMessages(data);
     } catch (e) {
       setError(e.message || "Ошибка загрузки сообщений");
@@ -58,11 +150,11 @@ export default function App() {
 
   async function onCreateChat(e) {
     e.preventDefault();
-    if (!newChatTitle.trim()) return;
+    if (!newChatTitle.trim() || !authToken) return;
 
     try {
       setError("");
-      const chat = await createChat(newChatTitle.trim());
+      const chat = await createChat(newChatTitle.trim(), authToken);
       const updated = [chat, ...chats];
       setChats(updated);
       setSelectedChatId(chat.id);
@@ -75,11 +167,11 @@ export default function App() {
 
   async function onSendMessage(e) {
     e.preventDefault();
-    if (!selectedChatId || !messageText.trim()) return;
+    if (!selectedChatId || !messageText.trim() || !authToken) return;
 
     try {
       setError("");
-      const newMessages = await sendMessage(selectedChatId, messageText.trim());
+      const newMessages = await sendMessage(selectedChatId, messageText.trim(), authToken);
       setMessages((prev) => [...prev, ...newMessages]);
       setMessageText("");
     } catch (e) {
@@ -88,11 +180,11 @@ export default function App() {
   }
 
   async function onDeleteChat(chatId) {
-    if (!chatId) return;
+    if (!chatId || !authToken) return;
 
     try {
       setError("");
-      await deleteChat(chatId);
+      await deleteChat(chatId, authToken);
       const updatedChats = chats.filter((chat) => chat.id !== chatId);
       setChats(updatedChats);
 
@@ -115,25 +207,97 @@ export default function App() {
       <header className="topbar">
         <div className="logo">LexigenAI</div>
         <nav className="nav">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              className={`nav-btn ${activeTab === item.key ? "active" : ""}`}
-              onClick={() => setActiveTab(item.key)}
-            >
-              {item.label}
-            </button>
-          ))}
+          {currentUser
+            ? navItems.map((item) => (
+                <button
+                  key={item.key}
+                  className={`nav-btn ${activeTab === item.key ? "active" : ""}`}
+                  onClick={() => setActiveTab(item.key)}
+                >
+                  {item.label}
+                </button>
+              ))
+            : [
+                { key: "login", label: "Вход" },
+                { key: "register", label: "Регистрация" },
+              ].map((item) => (
+                <button
+                  key={item.key}
+                  className={`nav-btn ${authMode === item.key ? "active" : ""}`}
+                  onClick={() => {
+                    setAuthMode(item.key);
+                    setActiveTab(item.key);
+                    setError("");
+                  }}
+                >
+                  {item.label}
+                </button>
+              ))}
         </nav>
+        {currentUser && (
+          <button className="logout-btn" onClick={handleLogout}>
+            Выйти
+          </button>
+        )}
       </header>
 
       <main className={`page ${activeTab === "chats" ? "chats-page" : ""}`}>
-        {activeTab === "home" && (
+        {!currentUser && authMode === "login" && (
+          <section className="card auth-card">
+            <h2>Страница входа</h2>
+            <form onSubmit={handleAuthSubmit} className="auth-form">
+              <input
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="Email"
+                required
+              />
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="Пароль"
+                required
+              />
+              <button type="submit">Войти</button>
+            </form>
+          </section>
+        )}
+
+        {!currentUser && authMode === "register" && (
+          <section className="card auth-card">
+            <h2>Страница регистрации</h2>
+            <form onSubmit={handleAuthSubmit} className="auth-form">
+              <input
+                value={authName}
+                onChange={(e) => setAuthName(e.target.value)}
+                placeholder="Имя"
+                required
+              />
+              <input
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="Email"
+                required
+              />
+              <input
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder="Пароль"
+                required
+              />
+              <button type="submit">Создать аккаунт</button>
+            </form>
+          </section>
+        )}
+
+        {currentUser && activeTab === "home" && (
           <section className="card hero">
             <h1>Система анализа кредитных договоров</h1>
             <p>
-              LexigenAI помогает юристам и клиентам анализировать условия кредитных
-              договоров, выявлять риски, спорные пункты и формировать рекомендации.
+              LexigenAI помогает юристам и клиентам анализировать условия кредитных договоров,
+              выявлять риски, спорные пункты и формировать рекомендации.
             </p>
             <ul>
               <li>Разбор условий договора и юридических рисков</li>
@@ -143,21 +307,23 @@ export default function App() {
           </section>
         )}
 
-        {activeTab === "profile" && (
+        {currentUser && activeTab === "profile" && (
           <section className="card stub">
             <h2>Личный кабинет</h2>
-            <p>Раздел для профиля пользователя и настроек доступа.</p>
+            <p>Имя: {currentUser.name}</p>
+            <p>Email: {currentUser.email}</p>
+            <p>Роль: {currentUser.role}</p>
           </section>
         )}
 
-        {activeTab === "analytics" && (
+        {currentUser && currentUser.role === "admin" && activeTab === "analytics" && (
           <section className="card stub">
             <h2>Аналитика</h2>
-            <p>Здесь будет статистика по чатам, рискам и типам договорных нарушений.</p>
+            <p>Раздел доступен только администратору.</p>
           </section>
         )}
 
-        {activeTab === "chats" && (
+        {currentUser && activeTab === "chats" && (
           <section className={`chat-layout ${isChatSidebarVisible ? "" : "sidebar-hidden"}`}>
             {isChatSidebarVisible && (
               <aside className="chat-sidebar card">
@@ -243,11 +409,11 @@ export default function App() {
                   Отправить
                 </button>
               </form>
-
-              {error && <div className="error-box">{error}</div>}
             </div>
           </section>
         )}
+
+        {error && <div className="error-box">{error}</div>}
       </main>
     </div>
   );

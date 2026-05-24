@@ -7,48 +7,27 @@ from backend.db.chats import Chat
 from backend.db.users import User
 from backend.modules.chats.schema import ChatCreateRequest, ChatResponse
 
-DEMO_USER_ID = UUID("11111111-1111-1111-1111-111111111111")
-
 
 class ChatsService:
-    async def ensure_demo_user(self, db: AsyncSession) -> User:
-        stmt = select(User).where(User.id == DEMO_USER_ID)
-        existing_user = (await db.execute(stmt)).scalar_one_or_none()
-        if existing_user:
-            return existing_user
-
-        demo_user = User(
-            id=DEMO_USER_ID,
-            name="Demo User",
-            email="demo@lexigen.local",
-            password_hash="demo_password_hash",
-        )
-        db.add(demo_user)
-        await db.commit()
-        await db.refresh(demo_user)
-        return demo_user
-
-    async def list_chats(self, db: AsyncSession) -> list[Chat]:
-        user = await self.ensure_demo_user(db)
-        stmt = select(Chat).where(Chat.user_id == user.id).order_by(Chat.created_at.desc())
+    async def list_chats(self, db: AsyncSession, current_user: User) -> list[Chat]:
+        stmt = select(Chat).where(Chat.user_id == current_user.id).order_by(Chat.created_at.desc())
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
-    async def create_chat(self, db: AsyncSession, title: str) -> Chat:
-        user = await self.ensure_demo_user(db)
-        chat = Chat(title=title, user_id=user.id)
+    async def create_chat(self, db: AsyncSession, title: str, current_user: User) -> Chat:
+        chat = Chat(title=title, user_id=current_user.id)
         db.add(chat)
         await db.commit()
         await db.refresh(chat)
         return chat
 
-    async def get_chat(self, db: AsyncSession, chat_id: UUID) -> Chat | None:
-        stmt = select(Chat).where(Chat.id == chat_id)
+    async def get_chat(self, db: AsyncSession, chat_id: UUID, current_user: User) -> Chat | None:
+        stmt = select(Chat).where(Chat.id == chat_id, Chat.user_id == current_user.id)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def delete_chat(self, db: AsyncSession, chat_id: UUID) -> bool:
-        chat = await self.get_chat(db, chat_id)
+    async def delete_chat(self, db: AsyncSession, chat_id: UUID, current_user: User) -> bool:
+        chat = await self.get_chat(db, chat_id, current_user)
         if not chat:
             return False
 
@@ -56,16 +35,16 @@ class ChatsService:
         await db.commit()
         return True
 
-    async def list_chats_response(self, db: AsyncSession) -> list[ChatResponse]:
-        chats = await self.list_chats(db)
+    async def list_chats_response(self, db: AsyncSession, current_user: User) -> list[ChatResponse]:
+        chats = await self.list_chats(db, current_user)
         return [ChatResponse.model_validate(chat) for chat in chats]
 
-    async def create_chat_response(self, db: AsyncSession, payload: ChatCreateRequest) -> ChatResponse:
-        chat = await self.create_chat(db, payload.title)
+    async def create_chat_response(self, db: AsyncSession, payload: ChatCreateRequest, current_user: User) -> ChatResponse:
+        chat = await self.create_chat(db, payload.title, current_user)
         return ChatResponse.model_validate(chat)
 
-    async def delete_chat_response(self, db: AsyncSession, chat_id: UUID) -> dict[str, str]:
-        deleted = await self.delete_chat(db, chat_id)
+    async def delete_chat_response(self, db: AsyncSession, chat_id: UUID, current_user: User) -> dict[str, str]:
+        deleted = await self.delete_chat(db, chat_id, current_user)
         if not deleted:
             return {"status": "not_found"}
         return {"status": "deleted"}

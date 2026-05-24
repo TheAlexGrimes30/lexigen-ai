@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.enums import MessageRole
 from backend.db.messages import Message
+from backend.db.users import User
 from backend.modules.chats.service import chats_service
 from backend.modules.messages.schema import MessageCreateRequest, MessageResponse
 
@@ -50,7 +51,11 @@ class MessagesService:
         await db.refresh(system_message)
         return system_message
 
-    async def list_messages_response(self, db: AsyncSession, chat_id: UUID) -> list[MessageResponse]:
+    async def list_messages_response(self, db: AsyncSession, chat_id: UUID, current_user: User) -> list[MessageResponse]:
+        chat = await chats_service.get_chat(db, chat_id, current_user)
+        if not chat:
+            raise HTTPException(status_code=404, detail="Чат не найден")
+
         messages = await self.list_messages(db, chat_id)
         return [MessageResponse.model_validate(message) for message in messages]
 
@@ -59,8 +64,9 @@ class MessagesService:
         db: AsyncSession,
         chat_id: UUID,
         payload: MessageCreateRequest,
+        current_user: User,
     ) -> list[MessageResponse]:
-        chat = await chats_service.get_chat(db, chat_id)
+        chat = await chats_service.get_chat(db, chat_id, current_user)
         if not chat:
             raise HTTPException(status_code=404, detail="Чат не найден")
 
@@ -80,8 +86,9 @@ class MessagesService:
         db: AsyncSession,
         chat_id: UUID,
         error_text: str,
+        current_user: User,
     ) -> MessageResponse:
-        chat = await chats_service.get_chat(db, chat_id)
+        chat = await chats_service.get_chat(db, chat_id, current_user)
         if not chat:
             raise HTTPException(status_code=404, detail="Чат не найден")
 
