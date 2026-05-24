@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.chats import Chat
 from backend.db.users import User
+from backend.modules.chats.schema import ChatCreateRequest, ChatResponse
 
 DEMO_USER_ID = UUID("11111111-1111-1111-1111-111111111111")
 
@@ -45,6 +46,14 @@ class ChatsService:
         stmt = select(Chat).where(Chat.id == chat_id)
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_chats_response(self, db: AsyncSession) -> list[ChatResponse]:
+        chats = await self.list_chats(db)
+        return [ChatResponse.model_validate(chat) for chat in chats]
+
+    async def create_chat_response(self, db: AsyncSession, payload: ChatCreateRequest) -> ChatResponse:
+        chat = await self.create_chat(db, payload.title)
+        return ChatResponse.model_validate(chat)
 
 
 chats_service = ChatsService()
