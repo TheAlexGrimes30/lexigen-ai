@@ -3,8 +3,8 @@ import uuid
 from sqlalchemy import UUID, ForeignKey, Column, DateTime, Boolean, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.db import SubscriptionPlan
 from backend.db.base import Base, TimestampMixin
+from backend.db.enums import SubscriptionPlan
 
 
 class Subscription(Base, TimestampMixin):

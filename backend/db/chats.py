@@ -1,13 +1,16 @@
 import uuid
+from typing import TYPE_CHECKING
 
 from sqlalchemy import UUID, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.db import User, Message
-from backend.db.analysis_result import AnalysisResult
 from backend.db.base import Base, TimestampMixin
-from backend.db.chat_documents import ChatDocument
 
+if TYPE_CHECKING:
+    from backend.db.users import User
+    from backend.db.analysis_result import AnalysisResult
+    from backend.db.messages import Message
+    from backend.db.chat_documents import ChatDocument
 
 class Chat(Base, TimestampMixin):
     __tablename__ = "chats"

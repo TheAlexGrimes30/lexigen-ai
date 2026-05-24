@@ -1,12 +1,16 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import UUID, String, Enum, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.db import Chat, UserRole
+
 from backend.db.base import Base, TimestampMixin
+from backend.db.enums import UserRole
+
+if TYPE_CHECKING:
+    from backend.db.chats import Chat
 
 
 class User(Base, TimestampMixin):

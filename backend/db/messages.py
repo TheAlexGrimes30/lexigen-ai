@@ -1,14 +1,16 @@
 import uuid
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import UUID, ForeignKey, Enum, Text, Index
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 
-from backend.db import Chat
-from backend.db.analysis_result import AnalysisResult
 from backend.db.base import Base, TimestampMixin
-from backend.db.chat_documents import ChatDocument
 from backend.db.enums import MessageRole
+
+if TYPE_CHECKING:
+    from backend.db.chats import Chat
+    from backend.db.chat_documents import ChatDocument
+    from backend.db.analysis_result import AnalysisResult
 
 
 class Message(Base, TimestampMixin):

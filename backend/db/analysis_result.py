@@ -1,11 +1,14 @@
 import uuid
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
 
 from sqlalchemy import UUID, ForeignKey, Text, String
 from sqlalchemy.orm import Mapped, relationship, mapped_column
 
-from backend.db import Message, User
 from backend.db.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from backend.db.users import User
+    from backend.db.messages import Message
 
 
 class AnalysisResult(Base, TimestampMixin):
