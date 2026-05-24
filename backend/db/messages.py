@@ -1,40 +1,67 @@
 import enum
+import uuid
+from typing import Optional
 
-from sqlalchemy import ForeignKey, Integer, Column, Text, func, DateTime, Index, Enum as SAEnum
-from sqlalchemy.orm import relationship
+from sqlalchemy import UUID, ForeignKey, Enum, Text, Index
+from sqlalchemy.orm import mapped_column, Mapped, relationship
 
+from backend.db import Chat
 from backend.db.base import Base
 
 
-class MessageRole(enum.Enum):
-    USER = "user"
-    ASSISTANT = "assistant"
+class MessageRole(str, enum.Enum):
+    user = "user"
+    assistant = "assistant"
+    system = "system"
+
+class MessageType(str, enum.Enum):
+    text = "text"
+    document = "document"
+    analysis = "analysis"
 
 
 class Message(Base):
     __tablename__ = "messages"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
 
-    chat_id = Column(
-        Integer,
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    chat_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("chats.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+
+    role: Mapped[MessageRole] = mapped_column(
+        Enum(MessageRole, name="message_role_enum"),
         nullable=False
     )
 
-    role = Column(
-        SAEnum(MessageRole, name="message_role"),
-        nullable=False
+    type: Mapped[MessageType] = mapped_column(
+        Enum(MessageType, name="message_type_enum"),
+        nullable=False,
+        default=MessageType.text
     )
 
-    content = Column(Text, nullable=False)
-
-    created_at = Column(
-        DateTime(timezone=True),
-        server_default=func.now()
+    content: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True
     )
 
-    chat = relationship("Chat", back_populates="messages", lazy="selectin")
+    chat: Mapped["Chat"] = relationship(
+        back_populates="messages"
+    )
 
     __table_args__ = (
         Index("ix_messages_chat_id", "chat_id"),

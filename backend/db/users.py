@@ -1,40 +1,59 @@
 import enum
+import uuid
+from datetime import datetime
+from typing import Optional
 
-from sqlalchemy import Integer, Column, String, DateTime, Enum, func
-from sqlalchemy.orm import relationship
+from sqlalchemy import UUID, String, Enum, DateTime
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.db import Chat
 from backend.db.base import Base, TimestampMixin
 
 
 class UserRole(enum.Enum):
-    USER = "user"
-    ADMIN = "admin"
+    user = "user"
+    admin = "admin"
+
+class UserStatus(str, enum.Enum):
+    active = "active"
+    banned = "banned"
+
 
 
 class User(Base, TimestampMixin):
     __tablename__ = "users"
 
-    id = Column(Integer, primary_key=True, index=True)
-
-    email = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
-
-    role = Column(
-        Enum(UserRole, name="user_role"),
-        default=UserRole.USER,
-        nullable=False
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
     )
 
-    subscriptions = relationship(
-        "Subscription",
-        back_populates="user",
-        lazy="selectin",
-        cascade="all, delete-orphan"
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    email: Mapped[str] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=False,
+        index=True
     )
 
-    chats = relationship(
-        "Chat",
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+
+    role: Mapped[UserRole] = mapped_column(
+        "primary_role",
+        Enum(UserRole, name="user_role_enum", create_type=False),
+        nullable=False,
+        default=UserRole.user
+    )
+
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True
+    )
+
+    chats: Mapped[list["Chat"]] = relationship(
         back_populates="user",
-        lazy="selectin",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
+        lazy="selectin"
     )
