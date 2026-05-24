@@ -1,16 +1,11 @@
-import enum
 import uuid
 
 from sqlalchemy import UUID, ForeignKey, Column, DateTime, Boolean, Enum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from backend.db import SubscriptionPlan
 from backend.db.base import Base, TimestampMixin
 
-class SubscriptionPlan(str, enum.Enum):
-    free = "free"
-    basic = "basic"
-    pro = "pro"
-    enterprise = "enterprise"
 
 class Subscription(Base, TimestampMixin):
     __tablename__ = "subscriptions"

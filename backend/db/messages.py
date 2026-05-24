@@ -1,4 +1,3 @@
-import enum
 import uuid
 from typing import Optional
 
@@ -9,12 +8,7 @@ from backend.db import Chat
 from backend.db.analysis_result import AnalysisResult
 from backend.db.base import Base, TimestampMixin
 from backend.db.chat_documents import ChatDocument
-
-
-class MessageRole(str, enum.Enum):
-    user = "user"
-    assistant = "assistant"
-    system = "system"
+from backend.db.enums import MessageRole
 
 
 class Message(Base, TimestampMixin):

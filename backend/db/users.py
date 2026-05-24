@@ -1,4 +1,3 @@
-import enum
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -6,18 +5,8 @@ from typing import Optional
 from sqlalchemy import UUID, String, Enum, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.db import Chat
+from backend.db import Chat, UserRole
 from backend.db.base import Base, TimestampMixin
-
-
-class UserRole(enum.Enum):
-    user = "user"
-    admin = "admin"
-
-class UserStatus(str, enum.Enum):
-    active = "active"
-    banned = "banned"
-
 
 
 class User(Base, TimestampMixin):
