@@ -87,19 +87,23 @@ export default function App() {
     }
   }
 
-  async function onDeleteSelectedChat() {
-    if (!selectedChatId) return;
+  async function onDeleteChat(chatId) {
+    if (!chatId) return;
 
     try {
       setError("");
-      await deleteChat(selectedChatId);
-      const updatedChats = chats.filter((chat) => chat.id !== selectedChatId);
+      await deleteChat(chatId);
+      const updatedChats = chats.filter((chat) => chat.id !== chatId);
       setChats(updatedChats);
-      if (updatedChats.length > 0) {
-        setSelectedChatId(updatedChats[0].id);
-      } else {
+
+      if (updatedChats.length === 0) {
         setSelectedChatId(null);
         setMessages([]);
+        return;
+      }
+
+      if (selectedChatId === chatId) {
+        setSelectedChatId(updatedChats[0].id);
       }
     } catch (e) {
       setError(e.message || "Ошибка удаления чата");
@@ -169,13 +173,29 @@ export default function App() {
 
                 <div className="chat-list">
                   {chats.map((chat) => (
-                    <button
+                    <div
                       key={chat.id}
-                      className={`chat-item ${chat.id === selectedChatId ? "active" : ""}`}
-                      onClick={() => setSelectedChatId(chat.id)}
+                      className={`chat-item-row ${chat.id === selectedChatId ? "active" : ""}`}
                     >
-                      {chat.title}
-                    </button>
+                      <button
+                        className={`chat-item ${chat.id === selectedChatId ? "active" : ""}`}
+                        onClick={() => setSelectedChatId(chat.id)}
+                      >
+                        {chat.title}
+                      </button>
+                      <button
+                        type="button"
+                        className="chat-item-delete"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteChat(chat.id);
+                        }}
+                        title="Удалить чат"
+                        aria-label="Удалить чат"
+                      >
+                        🗑
+                      </button>
+                    </div>
                   ))}
                 </div>
               </aside>
@@ -183,20 +203,7 @@ export default function App() {
 
             <div className="chat-main card">
               <div className="chat-main-header">
-                <div className="chat-title-wrap">
-                  <h3>{selectedChat ? selectedChat.title : "Выберите чат"}</h3>
-                  {selectedChat && (
-                    <button
-                      type="button"
-                      className="chat-delete-btn"
-                      onClick={onDeleteSelectedChat}
-                      title="Удалить чат"
-                      aria-label="Удалить чат"
-                    >
-                      🗑
-                    </button>
-                  )}
-                </div>
+                <h3>{selectedChat ? selectedChat.title : "Выберите чат"}</h3>
                 <button
                   type="button"
                   className="toggle-sidebar-btn"

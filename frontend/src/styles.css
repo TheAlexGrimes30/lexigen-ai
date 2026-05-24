@@ -126,29 +126,6 @@ body {
   gap: 12px;
 }
 
-.chat-title-wrap {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.chat-delete-btn {
-  min-width: 36px;
-  width: 36px;
-  height: 36px;
-  padding: 0;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 115, 115, 0.55);
-  background: linear-gradient(135deg, #5a1d2b 0%, #8e2338 60%, #c6384f 100%);
-  color: #fff;
-  font-size: 16px;
-  line-height: 1;
-}
-
-.chat-delete-btn:hover {
-  box-shadow: 0 0 16px rgba(255, 87, 87, 0.35);
-}
-
 .toggle-sidebar-btn {
   white-space: nowrap;
   font-size: 13px;
@@ -186,13 +163,41 @@ button {
   gap: 8px;
 }
 
+.chat-item-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .chat-item {
+  flex: 1;
   text-align: left;
   background: rgba(20, 30, 64, 0.85);
 }
 
 .chat-item.active {
   border-color: rgba(71, 204, 255, 0.85);
+}
+
+.chat-item-delete {
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 110, 110, 0.55);
+  background: linear-gradient(135deg, #5a1d2b 0%, #9c3046 60%, #d5465d 100%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.chat-item-row:hover .chat-item-delete,
+.chat-item-row.active .chat-item-delete {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
 }
 
 .messages {
