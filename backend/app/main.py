@@ -1,8 +1,12 @@
 from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+
 from backend.db.database import engine, AsyncSession, get_db
+from backend.modules.chats.router import router as chats_router
+from backend.modules.messages.router import router as messages_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -14,6 +18,17 @@ app = FastAPI( title="LexigenAI",
                version="1.0.0",
                lifespan=lifespan 
              )
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(chats_router)
+app.include_router(messages_router)
 
 
 @app.get("/")
