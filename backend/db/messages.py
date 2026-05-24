@@ -6,6 +6,7 @@ from sqlalchemy import UUID, ForeignKey, Enum, Text, Index
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 
 from backend.db import Chat
+from backend.db.analysis_result import AnalysisResult
 from backend.db.base import Base, TimestampMixin
 from backend.db.chat_documents import ChatDocument
 

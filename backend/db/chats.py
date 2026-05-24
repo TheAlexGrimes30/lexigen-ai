@@ -3,8 +3,10 @@ import uuid
 from sqlalchemy import UUID, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.db import User
+from backend.db import User, Message
+from backend.db.analysis_result import AnalysisResult
 from backend.db.base import Base, TimestampMixin
+from backend.db.chat_documents import ChatDocument
 
 
 class Chat(Base, TimestampMixin):
@@ -30,5 +32,22 @@ class Chat(Base, TimestampMixin):
 
     user: Mapped["User"] = relationship(
         back_populates="chats"
+    )
+
+    messages: Mapped[list["Message"]] = relationship(
+        back_populates="chat",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="Message.created_at"
+    )
+
+    documents: Mapped[list["ChatDocument"]] = relationship(
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+
+    analysis_results: Mapped[list["AnalysisResult"]] = relationship(
+        cascade="all, delete-orphan",
+        lazy="selectin"
     )
 

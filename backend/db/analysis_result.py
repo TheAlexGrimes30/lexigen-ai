@@ -1,25 +1,68 @@
 import uuid
 from typing import Optional
 
-from sqlalchemy.orm import Mapped, relationship
+from sqlalchemy import UUID, ForeignKey, Text, String
+from sqlalchemy.orm import Mapped, relationship, mapped_column
 
-from backend.db import Message
+from backend.db import Message, User
 from backend.db.base import Base, TimestampMixin
 
 
 class AnalysisResult(Base, TimestampMixin):
     __tablename__ = "analysis_results"
 
-    id: Mapped[uuid.UUID]
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
 
-    summary: Mapped[str]
+    chat_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chats.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
 
-    risks_found: Mapped[Optional[str]]
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_documents.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
 
-    recommendations: Mapped[Optional[str]]
+    generated_by_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
 
-    report_file_path: Mapped[Optional[str]]
+    summary: Mapped[str] = mapped_column(
+        Text,
+        nullable=False
+    )
+
+    risks_found: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    recommendations: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    report_file_path: Mapped[Optional[str]] = mapped_column(
+        String(1024),
+        nullable=True
+    )
 
     messages: Mapped[list["Message"]] = relationship(
-        back_populates="analysis_result"
+        back_populates="analysis_result",
+        lazy="selectin"
+    )
+
+    generated_by_user: Mapped["User"] = relationship(
+        lazy="selectin"
     )
