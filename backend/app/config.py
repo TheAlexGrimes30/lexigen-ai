@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     DB_HOST: str
     DB_PORT: int
 
+    JWT_SECRET: str = "change_me_very_secret_key"
+    JWT_EXPIRES_MINUTES: int = 60 * 24
+    ADMIN_EMAIL: str = "admin@lexigen.local"
+
     model_config = SettingsConfigDict(
         env_file=ENV_FILE,
         env_file_encoding="utf-8",

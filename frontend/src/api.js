@@ -1,33 +1,87 @@
 const API_BASE = "http://127.0.0.1:8000";
 
-export async function fetchChats() {
-  const response = await fetch(`${API_BASE}/api/chats`);
-  if (!response.ok) throw new Error("Не удалось получить список чатов");
-  return response.json();
+function authHeaders(token) {
+  if (!token) return { "Content-Type": "application/json" };
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
 }
 
-export async function createChat(title) {
+async function parseOrThrow(response, fallbackMessage) {
+  if (response.ok) return response.json();
+
+  let detail = fallbackMessage;
+  try {
+    const data = await response.json();
+    if (typeof data?.detail === "string") detail = data.detail;
+  } catch {
+    // ignore
+  }
+  throw new Error(detail);
+}
+
+export async function register(payload) {
+  const response = await fetch(`${API_BASE}/api/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseOrThrow(response, "Не удалось зарегистрироваться");
+}
+
+export async function login(payload) {
+  const response = await fetch(`${API_BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  return parseOrThrow(response, "Не удалось выполнить вход");
+}
+
+export async function fetchMe(token) {
+  const response = await fetch(`${API_BASE}/api/auth/me`, {
+    headers: authHeaders(token),
+  });
+  return parseOrThrow(response, "Сессия недействительна");
+}
+
+export async function fetchChats(token) {
+  const response = await fetch(`${API_BASE}/api/chats`, {
+    headers: authHeaders(token),
+  });
+  return parseOrThrow(response, "Не удалось получить список чатов");
+}
+
+export async function createChat(title, token) {
   const response = await fetch(`${API_BASE}/api/chats`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(token),
     body: JSON.stringify({ title }),
   });
-  if (!response.ok) throw new Error("Не удалось создать чат");
-  return response.json();
+  return parseOrThrow(response, "Не удалось создать чат");
 }
 
-export async function fetchMessages(chatId) {
-  const response = await fetch(`${API_BASE}/api/chats/${chatId}/messages`);
-  if (!response.ok) throw new Error("Не удалось загрузить сообщения");
-  return response.json();
+export async function deleteChat(chatId, token) {
+  const response = await fetch(`${API_BASE}/api/chats/${chatId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+  return parseOrThrow(response, "Не удалось удалить чат");
 }
 
-export async function sendMessage(chatId, content) {
+export async function fetchMessages(chatId, token) {
+  const response = await fetch(`${API_BASE}/api/chats/${chatId}/messages`, {
+    headers: authHeaders(token),
+  });
+  return parseOrThrow(response, "Не удалось загрузить сообщения");
+}
+
+export async function sendMessage(chatId, content, token) {
   const response = await fetch(`${API_BASE}/api/chats/${chatId}/messages`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders(token),
     body: JSON.stringify({ content }),
   });
-  if (!response.ok) throw new Error("Не удалось отправить сообщение");
-  return response.json();
+  return parseOrThrow(response, "Не удалось отправить сообщение");
 }

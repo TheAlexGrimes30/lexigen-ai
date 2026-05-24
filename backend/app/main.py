@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from backend.db.database import engine, AsyncSession, get_db
+from backend.modules.auth.router import router as auth_router
 from backend.modules.chats.router import router as chats_router
 from backend.modules.messages.router import router as messages_router
 
@@ -27,6 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(chats_router)
 app.include_router(messages_router)
 
