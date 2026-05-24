@@ -33,4 +33,7 @@ class Subscription(Base, TimestampMixin):
 
     expires_at = Column(DateTime(timezone=True))
 
-    user = relationship("User", back_populates="subscriptions")
+    user = relationship(
+        "User",
+        back_populates="subscriptions"
+    )
