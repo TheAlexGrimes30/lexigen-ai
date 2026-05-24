@@ -126,6 +126,29 @@ body {
   gap: 12px;
 }
 
+.chat-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chat-delete-btn {
+  min-width: 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 115, 115, 0.55);
+  background: linear-gradient(135deg, #5a1d2b 0%, #8e2338 60%, #c6384f 100%);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.chat-delete-btn:hover {
+  box-shadow: 0 0 16px rgba(255, 87, 87, 0.35);
+}
+
 .toggle-sidebar-btn {
   white-space: nowrap;
   font-size: 13px;
@@ -188,18 +211,18 @@ button {
 }
 
 .message.user {
-  background: rgba(51, 123, 255, 0.2);
-  border-color: rgba(51, 123, 255, 0.45);
+  background: rgba(36, 137, 255, 0.24);
+  border-color: rgba(86, 181, 255, 0.75);
 }
 
 .message.assistant {
-  background: rgba(33, 62, 122, 0.45);
-  border-color: rgba(87, 145, 255, 0.35);
+  background: rgba(122, 73, 255, 0.22);
+  border-color: rgba(176, 133, 255, 0.72);
 }
 
 .message.system {
-  background: rgba(143, 56, 56, 0.35);
-  border-color: rgba(255, 122, 122, 0.45);
+  background: rgba(201, 63, 63, 0.26);
+  border-color: rgba(255, 128, 128, 0.78);
 }
 
 .message-role {

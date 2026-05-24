@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createChat, fetchChats, fetchMessages, sendMessage } from "./api";
+import { createChat, deleteChat, fetchChats, fetchMessages, sendMessage } from "./api";
 
 const NAV_ITEMS = [
   { key: "home", label: "Главная" },
@@ -87,6 +87,25 @@ export default function App() {
     }
   }
 
+  async function onDeleteSelectedChat() {
+    if (!selectedChatId) return;
+
+    try {
+      setError("");
+      await deleteChat(selectedChatId);
+      const updatedChats = chats.filter((chat) => chat.id !== selectedChatId);
+      setChats(updatedChats);
+      if (updatedChats.length > 0) {
+        setSelectedChatId(updatedChats[0].id);
+      } else {
+        setSelectedChatId(null);
+        setMessages([]);
+      }
+    } catch (e) {
+      setError(e.message || "Ошибка удаления чата");
+    }
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -164,7 +183,20 @@ export default function App() {
 
             <div className="chat-main card">
               <div className="chat-main-header">
-                <h3>{selectedChat ? selectedChat.title : "Выберите чат"}</h3>
+                <div className="chat-title-wrap">
+                  <h3>{selectedChat ? selectedChat.title : "Выберите чат"}</h3>
+                  {selectedChat && (
+                    <button
+                      type="button"
+                      className="chat-delete-btn"
+                      onClick={onDeleteSelectedChat}
+                      title="Удалить чат"
+                      aria-label="Удалить чат"
+                    >
+                      🗑
+                    </button>
+                  )}
+                </div>
                 <button
                   type="button"
                   className="toggle-sidebar-btn"

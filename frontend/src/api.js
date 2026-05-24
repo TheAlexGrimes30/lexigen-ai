@@ -16,6 +16,14 @@ export async function createChat(title) {
   return response.json();
 }
 
+export async function deleteChat(chatId) {
+  const response = await fetch(`${API_BASE}/api/chats/${chatId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Не удалось удалить чат");
+  return response.json();
+}
+
 export async function fetchMessages(chatId) {
   const response = await fetch(`${API_BASE}/api/chats/${chatId}/messages`);
   if (!response.ok) throw new Error("Не удалось загрузить сообщения");

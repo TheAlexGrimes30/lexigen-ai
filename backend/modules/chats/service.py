@@ -47,6 +47,15 @@ class ChatsService:
         result = await db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def delete_chat(self, db: AsyncSession, chat_id: UUID) -> bool:
+        chat = await self.get_chat(db, chat_id)
+        if not chat:
+            return False
+
+        await db.delete(chat)
+        await db.commit()
+        return True
+
     async def list_chats_response(self, db: AsyncSession) -> list[ChatResponse]:
         chats = await self.list_chats(db)
         return [ChatResponse.model_validate(chat) for chat in chats]
@@ -54,6 +63,12 @@ class ChatsService:
     async def create_chat_response(self, db: AsyncSession, payload: ChatCreateRequest) -> ChatResponse:
         chat = await self.create_chat(db, payload.title)
         return ChatResponse.model_validate(chat)
+
+    async def delete_chat_response(self, db: AsyncSession, chat_id: UUID) -> dict[str, str]:
+        deleted = await self.delete_chat(db, chat_id)
+        if not deleted:
+            return {"status": "not_found"}
+        return {"status": "deleted"}
 
 
 chats_service = ChatsService()
