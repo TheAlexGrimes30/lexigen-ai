@@ -6,7 +6,8 @@ from sqlalchemy import UUID, ForeignKey, Enum, Text, Index
 from sqlalchemy.orm import mapped_column, Mapped, relationship
 
 from backend.db import Chat
-from backend.db.base import Base
+from backend.db.base import Base, TimestampMixin
+from backend.db.chat_documents import ChatDocument
 
 
 class MessageRole(str, enum.Enum):
@@ -14,13 +15,8 @@ class MessageRole(str, enum.Enum):
     assistant = "assistant"
     system = "system"
 
-class MessageType(str, enum.Enum):
-    text = "text"
-    document = "document"
-    analysis = "analysis"
 
-
-class Message(Base):
+class Message(Base, TimestampMixin):
     __tablename__ = "messages"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -48,19 +44,35 @@ class Message(Base):
         nullable=False
     )
 
-    type: Mapped[MessageType] = mapped_column(
-        Enum(MessageType, name="message_type_enum"),
-        nullable=False,
-        default=MessageType.text
-    )
-
     content: Mapped[Optional[str]] = mapped_column(
         Text,
         nullable=True
     )
 
+    chat_document_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_documents.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
+    analysis_result_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("analysis_results.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
     chat: Mapped["Chat"] = relationship(
         back_populates="messages"
+    )
+
+    chat_document: Mapped[Optional["ChatDocument"]] = relationship(
+        back_populates="messages",
+        lazy="selectin"
+    )
+
+    analysis_result: Mapped[Optional["AnalysisResult"]] = relationship(
+        back_populates="messages",
+        lazy="selectin"
     )
 
     __table_args__ = (
