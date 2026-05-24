@@ -50,3 +50,9 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
         lazy="selectin"
     )
+
+    subscriptions = relationship(
+        "Subscription",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
