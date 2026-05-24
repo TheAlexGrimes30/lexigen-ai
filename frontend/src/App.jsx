@@ -21,6 +21,7 @@ export default function App() {
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authPasswordConfirm, setAuthPasswordConfirm] = useState("");
 
   const [chats, setChats] = useState([]);
   const [selectedChatId, setSelectedChatId] = useState(null);
@@ -98,11 +99,21 @@ export default function App() {
   async function handleAuthSubmit(e) {
     e.preventDefault();
 
+    if (authMode === "register" && authPassword !== authPasswordConfirm) {
+      setError("Пароли не совпадают");
+      return;
+    }
+
     try {
       setError("");
       const payload =
         authMode === "register"
-          ? { name: authName.trim(), email: authEmail.trim(), password: authPassword }
+          ? {
+              name: authName.trim(),
+              email: authEmail.trim(),
+              password: authPassword,
+              password_confirm: authPasswordConfirm,
+            }
           : { email: authEmail.trim(), password: authPassword };
 
       const data = authMode === "register" ? await register(payload) : await login(payload);
@@ -110,6 +121,7 @@ export default function App() {
       setAuthToken(data.access_token);
       setCurrentUser(data.user);
       setAuthPassword("");
+      setAuthPasswordConfirm("");
       setAuthName("");
       setActiveTab("chats");
     } catch (e) {
@@ -227,6 +239,8 @@ export default function App() {
                   onClick={() => {
                     setAuthMode(item.key);
                     setActiveTab(item.key);
+                    setAuthPassword("");
+                    setAuthPasswordConfirm("");
                     setError("");
                   }}
                 >
@@ -234,11 +248,6 @@ export default function App() {
                 </button>
               ))}
         </nav>
-        {currentUser && (
-          <button className="logout-btn" onClick={handleLogout}>
-            Выйти
-          </button>
-        )}
       </header>
 
       <main className={`page ${activeTab === "chats" ? "chats-page" : ""}`}>
@@ -287,6 +296,13 @@ export default function App() {
                 placeholder="Пароль"
                 required
               />
+              <input
+                type="password"
+                value={authPasswordConfirm}
+                onChange={(e) => setAuthPasswordConfirm(e.target.value)}
+                placeholder="Подтверждение пароля"
+                required
+              />
               <button type="submit">Создать аккаунт</button>
             </form>
           </section>
@@ -313,6 +329,9 @@ export default function App() {
             <p>Имя: {currentUser.name}</p>
             <p>Email: {currentUser.email}</p>
             <p>Роль: {currentUser.role}</p>
+            <button type="button" className="profile-logout-btn" onClick={handleLogout}>
+              Выйти из аккаунта
+            </button>
           </section>
         )}
 

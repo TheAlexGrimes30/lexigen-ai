@@ -88,6 +88,30 @@ body {
   color: #b4c2e6;
 }
 
+.auth-card {
+  width: min(100%, 420px);
+  margin: 56px auto 0;
+}
+
+.auth-card h2 {
+  margin-top: 0;
+  text-align: center;
+}
+
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.auth-form button {
+  margin-top: 4px;
+}
+
+.profile-logout-btn {
+  margin-top: 18px;
+}
+
 .chat-layout {
   position: relative;
   padding-left: 336px;
