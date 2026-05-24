@@ -16,6 +16,7 @@ export default function App() {
   const [newChatTitle, setNewChatTitle] = useState("");
   const [messageText, setMessageText] = useState("");
   const [error, setError] = useState("");
+  const [isChatSidebarVisible, setIsChatSidebarVisible] = useState(true);
 
   const selectedChat = useMemo(
     () => chats.find((chat) => chat.id === selectedChatId) || null,
@@ -103,7 +104,7 @@ export default function App() {
         </nav>
       </header>
 
-      <main className="page">
+      <main className={`page ${activeTab === "chats" ? "chats-page" : ""}`}>
         {activeTab === "home" && (
           <section className="card hero">
             <h1>Система анализа кредитных договоров</h1>
@@ -134,33 +135,44 @@ export default function App() {
         )}
 
         {activeTab === "chats" && (
-          <section className="chat-layout">
-            <aside className="chat-sidebar card">
-              <h3>Ваши чаты</h3>
-              <form onSubmit={onCreateChat} className="new-chat-form">
-                <input
-                  value={newChatTitle}
-                  onChange={(e) => setNewChatTitle(e.target.value)}
-                  placeholder="Название нового чата"
-                />
-                <button type="submit">Создать чат</button>
-              </form>
+          <section className={`chat-layout ${isChatSidebarVisible ? "" : "sidebar-hidden"}`}>
+            {isChatSidebarVisible && (
+              <aside className="chat-sidebar card">
+                <h3>Ваши чаты</h3>
+                <form onSubmit={onCreateChat} className="new-chat-form">
+                  <input
+                    value={newChatTitle}
+                    onChange={(e) => setNewChatTitle(e.target.value)}
+                    placeholder="Название нового чата"
+                  />
+                  <button type="submit">Создать чат</button>
+                </form>
 
-              <div className="chat-list">
-                {chats.map((chat) => (
-                  <button
-                    key={chat.id}
-                    className={`chat-item ${chat.id === selectedChatId ? "active" : ""}`}
-                    onClick={() => setSelectedChatId(chat.id)}
-                  >
-                    {chat.title}
-                  </button>
-                ))}
-              </div>
-            </aside>
+                <div className="chat-list">
+                  {chats.map((chat) => (
+                    <button
+                      key={chat.id}
+                      className={`chat-item ${chat.id === selectedChatId ? "active" : ""}`}
+                      onClick={() => setSelectedChatId(chat.id)}
+                    >
+                      {chat.title}
+                    </button>
+                  ))}
+                </div>
+              </aside>
+            )}
 
             <div className="chat-main card">
-              <h3>{selectedChat ? selectedChat.title : "Выберите чат"}</h3>
+              <div className="chat-main-header">
+                <h3>{selectedChat ? selectedChat.title : "Выберите чат"}</h3>
+                <button
+                  type="button"
+                  className="toggle-sidebar-btn"
+                  onClick={() => setIsChatSidebarVisible((prev) => !prev)}
+                >
+                  {isChatSidebarVisible ? "Скрыть панель чатов" : "Показать панель чатов"}
+                </button>
+              </div>
 
               <div className="messages">
                 {messages.length === 0 && (
