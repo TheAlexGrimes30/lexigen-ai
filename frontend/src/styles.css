@@ -115,6 +115,12 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
+}
+
+.password-toggle input {
+  width: auto;
+  margin: 0;
 }
 
 .profile-logout-btn {
