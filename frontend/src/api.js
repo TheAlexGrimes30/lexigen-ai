@@ -46,6 +46,21 @@ export async function fetchMe(token) {
   return parseOrThrow(response, "Сессия недействительна");
 }
 
+export async function becomeAdmin(token) {
+  const response = await fetch(`${API_BASE}/api/auth/become-admin`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+  return parseOrThrow(response, "Не удалось выдать права администратора");
+}
+
+export async function fetchAdminAnalytics(token) {
+  const response = await fetch(`${API_BASE}/api/auth/admin/analytics`, {
+    headers: authHeaders(token),
+  });
+  return parseOrThrow(response, "Не удалось загрузить аналитику");
+}
+
 export async function fetchChats(token) {
   const response = await fetch(`${API_BASE}/api/chats`, {
     headers: authHeaders(token),

@@ -108,6 +108,21 @@ body {
   margin-top: 4px;
 }
 
+.password-toggle {
+  margin-left: auto;
+  font-size: 12px;
+  color: #9fb6e8;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.password-toggle input {
+  width: auto;
+  margin: 0;
+}
+
 .profile-logout-btn {
   margin-top: 18px;
 }

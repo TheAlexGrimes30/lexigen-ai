@@ -6,13 +6,15 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.config import settings
+from backend.db.chats import Chat
 from backend.db.enums import UserRole
+from backend.db.messages import Message
 from backend.db.users import User
-from backend.modules.auth.schema import AuthUserResponse
+from backend.modules.auth.schema import AdminAnalyticsResponse, AuthUserResponse
 
 
 class AuthService:
@@ -123,6 +125,24 @@ class AuthService:
         await db.commit()
         await db.refresh(user)
         return user
+
+    async def promote_to_admin(self, db: AsyncSession, user: User) -> User:
+        if user.role != UserRole.admin:
+            user.role = UserRole.admin
+            await db.commit()
+            await db.refresh(user)
+        return user
+
+    async def get_admin_analytics(self, db: AsyncSession) -> AdminAnalyticsResponse:
+        users_count = (await db.execute(select(func.count()).select_from(User))).scalar_one()
+        chats_count = (await db.execute(select(func.count()).select_from(Chat))).scalar_one()
+        messages_count = (await db.execute(select(func.count()).select_from(Message))).scalar_one()
+
+        return AdminAnalyticsResponse(
+            users_count=users_count,
+            chats_count=chats_count,
+            messages_count=messages_count,
+        )
 
     def to_auth_user(self, user: User) -> AuthUserResponse:
         return AuthUserResponse(
