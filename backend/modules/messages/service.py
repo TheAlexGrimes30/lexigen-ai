@@ -9,6 +9,7 @@ from backend.db.messages import Message
 from backend.db.users import User
 from backend.modules.chats.service import chats_service
 from backend.modules.messages.schema import MessageCreateRequest, MessageResponse
+from backend.modules.rag.service import rag_app_service
 
 
 class MessagesService:
@@ -25,12 +26,20 @@ class MessagesService:
             content=user_text,
         )
         db.add(user_message)
+        await db.flush()
+
+        try:
+            assistant_text = await rag_app_service.ask(user_text)
+            assistant_role = MessageRole.assistant
+        except Exception as exc:
+            assistant_text = f"Система не смогла получить RAG-ответ: {exc}"
+            assistant_role = MessageRole.system
 
         assistant_message = Message(
             chat_id=chat_id,
             user_id=user_id,
-            role=MessageRole.assistant,
-            content=f"Принял ваш запрос по кредитному договору: {user_text}",
+            role=assistant_role,
+            content=assistant_text,
         )
         db.add(assistant_message)
 
