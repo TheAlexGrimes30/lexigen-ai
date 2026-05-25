@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 import uvicorn
 from fastapi import FastAPI, Depends
@@ -14,7 +15,7 @@ from backend.modules.rag.service import rag_app_service
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await rag_app_service.startup()
+    asyncio.create_task(rag_app_service.startup())
     yield
     await engine.dispose()
 
