@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  becomeAdmin,
   createChat,
   deleteChat,
+  fetchAdminAnalytics,
   fetchChats,
   fetchMe,
   fetchMessages,
@@ -30,6 +32,9 @@ export default function App() {
   const [messageText, setMessageText] = useState("");
   const [error, setError] = useState("");
   const [isChatSidebarVisible, setIsChatSidebarVisible] = useState(true);
+  const [adminAnalytics, setAdminAnalytics] = useState(null);
+  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
+  const [isPromotingToAdmin, setIsPromotingToAdmin] = useState(false);
 
   const selectedChat = useMemo(
     () => chats.find((chat) => chat.id === selectedChatId) || null,
@@ -56,6 +61,7 @@ export default function App() {
       setChats([]);
       setMessages([]);
       setSelectedChatId(null);
+      setAdminAnalytics(null);
       return;
     }
 
@@ -66,6 +72,13 @@ export default function App() {
     if (!selectedChatId || !authToken) return;
     loadMessages(selectedChatId, authToken);
   }, [selectedChatId, authToken]);
+
+  useEffect(() => {
+    if (!authToken || !currentUser || currentUser.role !== "admin" || activeTab !== "analytics") {
+      return;
+    }
+    loadAdminAnalytics(authToken);
+  }, [activeTab, authToken, currentUser]);
 
   async function bootstrapSession() {
     try {
@@ -157,6 +170,39 @@ export default function App() {
     } catch (e) {
       setError(e.message || "Ошибка загрузки сообщений");
       setMessages([]);
+    }
+  }
+
+  async function loadAdminAnalytics(token = authToken) {
+    if (!token) return;
+
+    try {
+      setError("");
+      setIsAnalyticsLoading(true);
+      const data = await fetchAdminAnalytics(token);
+      setAdminAnalytics(data);
+    } catch (e) {
+      setError(e.message || "Ошибка загрузки аналитики");
+    } finally {
+      setIsAnalyticsLoading(false);
+    }
+  }
+
+  async function onBecomeAdmin() {
+    if (!authToken || isPromotingToAdmin || currentUser?.role === "admin") return;
+
+    try {
+      setError("");
+      setIsPromotingToAdmin(true);
+      const data = await becomeAdmin(authToken);
+      localStorage.setItem(TOKEN_KEY, data.access_token);
+      setAuthToken(data.access_token);
+      setCurrentUser(data.user);
+      setActiveTab("analytics");
+    } catch (e) {
+      setError(e.message || "Не удалось выдать права администратора");
+    } finally {
+      setIsPromotingToAdmin(false);
     }
   }
 
@@ -329,6 +375,16 @@ export default function App() {
             <p>Имя: {currentUser.name}</p>
             <p>Email: {currentUser.email}</p>
             <p>Роль: {currentUser.role}</p>
+            {currentUser.role !== "admin" && (
+              <button
+                type="button"
+                className="profile-admin-btn"
+                onClick={onBecomeAdmin}
+                disabled={isPromotingToAdmin}
+              >
+                {isPromotingToAdmin ? "Выдаём права администратора..." : "Стать админом (временно)"}
+              </button>
+            )}
             <button type="button" className="profile-logout-btn" onClick={handleLogout}>
               Выйти из аккаунта
             </button>
@@ -338,7 +394,14 @@ export default function App() {
         {currentUser && currentUser.role === "admin" && activeTab === "analytics" && (
           <section className="card stub">
             <h2>Аналитика</h2>
-            <p>Раздел доступен только администратору.</p>
+            {isAnalyticsLoading && <p>Загрузка аналитики...</p>}
+            {!isAnalyticsLoading && adminAnalytics && (
+              <>
+                <p>Пользователей: {adminAnalytics.users_count}</p>
+                <p>Чатов: {adminAnalytics.chats_count}</p>
+                <p>Сообщений: {adminAnalytics.messages_count}</p>
+              </>
+            )}
           </section>
         )}
 

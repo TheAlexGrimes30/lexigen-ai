@@ -28,3 +28,9 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: AuthUserResponse
+
+
+class AdminAnalyticsResponse(BaseModel):
+    users_count: int
+    chats_count: int
+    messages_count: int
