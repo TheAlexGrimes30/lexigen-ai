@@ -29,6 +29,7 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authPasswordConfirm, setAuthPasswordConfirm] = useState("");
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const [chats, setChats] = useState([]);
   const [selectedChatId, setSelectedChatId] = useState(null);
@@ -284,12 +285,20 @@ export default function App() {
                 required
               />
               <input
-                type="password"
+                type={isPasswordVisible ? "text" : "password"}
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
                 placeholder="Пароль"
                 required
               />
+              <label className="password-toggle">
+                <span>Показать пароль</span>
+                <input
+                  type="checkbox"
+                  checked={isPasswordVisible}
+                  onChange={(e) => setIsPasswordVisible(e.target.checked)}
+                />
+              </label>
               <button type="submit">Войти</button>
             </form>
           </section>
@@ -312,24 +321,31 @@ export default function App() {
                 required
               />
               <input
-                type="password"
+                type={isPasswordVisible ? "text" : "password"}
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
                 placeholder="Пароль"
                 required
               />
               <input
-                type="password"
+                type={isPasswordVisible ? "text" : "password"}
                 value={authPasswordConfirm}
                 onChange={(e) => setAuthPasswordConfirm(e.target.value)}
                 placeholder="Подтверждение пароля"
                 required
               />
+              <label className="password-toggle">
+                <span>Показать пароль</span>
+                <input
+                  type="checkbox"
+                  checked={isPasswordVisible}
+                  onChange={(e) => setIsPasswordVisible(e.target.checked)}
+                />
+              </label>
               <button type="submit">Создать аккаунт</button>
             </form>
           </section>
         )}
-
         {currentUser && activeTab === "home" && (
           <section className="card hero">
             <h1>Система анализа кредитных договоров</h1>
