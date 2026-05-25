@@ -8,16 +8,20 @@ from backend.db.database import engine, AsyncSession, get_db
 from backend.modules.auth.router import router as auth_router
 from backend.modules.chats.router import router as chats_router
 from backend.modules.messages.router import router as messages_router
+from backend.modules.rag.router import router as rag_router
+from backend.modules.rag.service import rag_app_service
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    await rag_app_service.startup()
     yield
     await engine.dispose()
 
 app = FastAPI( title="LexigenAI",
                description="AI assistant for credit law",
                version="1.0.0",
-               lifespan=lifespan 
+               lifespan=lifespan
              )
 
 app.add_middleware(
@@ -31,6 +35,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(chats_router)
 app.include_router(messages_router)
+app.include_router(rag_router)
 
 
 @app.get("/")

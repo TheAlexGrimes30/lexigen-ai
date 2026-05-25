@@ -36,6 +36,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [newChatTitle, setNewChatTitle] = useState("");
   const [messageText, setMessageText] = useState("");
+  const [isMessageSending, setIsMessageSending] = useState(false);
   const [error, setError] = useState("");
   const [isChatSidebarVisible, setIsChatSidebarVisible] = useState(true);
 
@@ -197,15 +198,35 @@ export default function App() {
 
   async function onSendMessage(e) {
     e.preventDefault();
-    if (!selectedChatId || !messageText.trim() || !authToken) return;
+    if (!selectedChatId || !messageText.trim() || !authToken || isMessageSending) return;
+
+    const textToSend = messageText.trim();
 
     try {
       setError("");
-      const newMessages = await sendMessage(selectedChatId, messageText.trim(), authToken);
-      setMessages((prev) => [...prev, ...newMessages]);
+      setIsMessageSending(true);
       setMessageText("");
+
+      const optimisticMessage = {
+        id: `local-${Date.now()}`,
+        chat_id: selectedChatId,
+        user_id: currentUser?.id || "local",
+        role: "user",
+        content: textToSend,
+        created_at: new Date().toISOString(),
+      };
+
+      setMessages((prev) => [...prev, optimisticMessage]);
+
+      const newMessages = await sendMessage(selectedChatId, textToSend, authToken);
+      setMessages((prev) => [
+        ...prev.filter((msg) => msg.id !== optimisticMessage.id),
+        ...newMessages,
+      ]);
     } catch (e) {
       setError(e.message || "Ошибка отправки сообщения");
+    } finally {
+      setIsMessageSending(false);
     }
   }
 
@@ -453,6 +474,17 @@ export default function App() {
                     <div>{msg.content}</div>
                   </div>
                 ))}
+
+                {isMessageSending && (
+                  <div className="message assistant loading-message">
+                    <div className="message-role">Ассистент</div>
+                    <div className="typing-indicator" aria-label="Ассистент готовит ответ">
+                      <span></span>
+                      <span></span>
+                      <span></span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <form onSubmit={onSendMessage} className="message-form">
@@ -460,10 +492,10 @@ export default function App() {
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
                   placeholder="Введите сообщение..."
-                  disabled={!selectedChatId}
+                  disabled={!selectedChatId || isMessageSending}
                 />
-                <button type="submit" disabled={!selectedChatId}>
-                  Отправить
+                <button type="submit" disabled={!selectedChatId || isMessageSending}>
+                  {isMessageSending ? "Ждём RAG..." : "Отправить"}
                 </button>
               </form>
             </div>
