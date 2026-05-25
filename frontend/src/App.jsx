@@ -24,6 +24,8 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authPasswordConfirm, setAuthPasswordConfirm] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
 
   const [chats, setChats] = useState([]);
   const [selectedChatId, setSelectedChatId] = useState(null);
@@ -287,6 +289,8 @@ export default function App() {
                     setActiveTab(item.key);
                     setAuthPassword("");
                     setAuthPasswordConfirm("");
+                    setShowLoginPassword(false);
+                    setShowRegisterPassword(false);
                     setError("");
                   }}
                 >
@@ -308,14 +312,20 @@ export default function App() {
                 required
               />
               <input
-                type="password"
+                type={showLoginPassword ? "text" : "password"}
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
                 placeholder="Пароль"
                 required
               />
-              <button type="submit">Войти</button>
-            </form>
+              <label className="password-toggle">
+                <input
+                  type="checkbox"
+                  checked={showLoginPassword}
+                  onChange={(e) => setShowLoginPassword(e.target.checked)}
+                />{" "}
+                Показать пароль
+              </label>              <button type="submit">Войти</button>            </form>
           </section>
         )}
 
@@ -336,21 +346,27 @@ export default function App() {
                 required
               />
               <input
-                type="password"
+                type={showRegisterPassword ? "text" : "password"}
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
                 placeholder="Пароль"
                 required
               />
               <input
-                type="password"
+                type={showRegisterPassword ? "text" : "password"}
                 value={authPasswordConfirm}
                 onChange={(e) => setAuthPasswordConfirm(e.target.value)}
                 placeholder="Подтверждение пароля"
                 required
               />
-              <button type="submit">Создать аккаунт</button>
-            </form>
+              <label className="password-toggle">
+                <input
+                  type="checkbox"
+                  checked={showRegisterPassword}
+                  onChange={(e) => setShowRegisterPassword(e.target.checked)}
+                />{" "}
+                Показать пароль
+              </label>              <button type="submit">Создать аккаунт</button>            </form>
           </section>
         )}
 
