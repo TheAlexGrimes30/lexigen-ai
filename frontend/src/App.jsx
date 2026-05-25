@@ -1,9 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  becomeAdmin,
   createChat,
   deleteChat,
-  fetchAdminAnalytics,
   fetchChats,
   fetchMe,
   fetchMessages,
@@ -13,10 +11,17 @@ import {
 } from "./api";
 
 const TOKEN_KEY = "lexigen_token";
+const THEME_KEY = "lexigen_theme";
+
+function getInitialTheme() {
+  const savedTheme = localStorage.getItem(THEME_KEY);
+  return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState("login");
   const [authMode, setAuthMode] = useState("login");
+  const [theme, setTheme] = useState(getInitialTheme);
   const [authToken, setAuthToken] = useState(localStorage.getItem(TOKEN_KEY) || "");
   const [currentUser, setCurrentUser] = useState(null);
 
@@ -24,8 +29,6 @@ export default function App() {
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
   const [authPasswordConfirm, setAuthPasswordConfirm] = useState("");
-  const [showLoginPassword, setShowLoginPassword] = useState(false);
-  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
 
   const [chats, setChats] = useState([]);
   const [selectedChatId, setSelectedChatId] = useState(null);
@@ -34,9 +37,8 @@ export default function App() {
   const [messageText, setMessageText] = useState("");
   const [error, setError] = useState("");
   const [isChatSidebarVisible, setIsChatSidebarVisible] = useState(true);
-  const [adminAnalytics, setAdminAnalytics] = useState(null);
-  const [isAnalyticsLoading, setIsAnalyticsLoading] = useState(false);
-  const [isPromotingToAdmin, setIsPromotingToAdmin] = useState(false);
+
+  const isLightTheme = theme === "light";
 
   const selectedChat = useMemo(
     () => chats.find((chat) => chat.id === selectedChatId) || null,
@@ -58,29 +60,25 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
+
+  useEffect(() => {
     if (!authToken) {
       setCurrentUser(null);
       setChats([]);
       setMessages([]);
       setSelectedChatId(null);
-      setAdminAnalytics(null);
       return;
     }
 
     bootstrapSession();
   }, [authToken]);
-
   useEffect(() => {
     if (!selectedChatId || !authToken) return;
     loadMessages(selectedChatId, authToken);
   }, [selectedChatId, authToken]);
-
-  useEffect(() => {
-    if (!authToken || !currentUser || currentUser.role !== "admin" || activeTab !== "analytics") {
-      return;
-    }
-    loadAdminAnalytics(authToken);
-  }, [activeTab, authToken, currentUser]);
 
   async function bootstrapSession() {
     try {
@@ -109,6 +107,10 @@ export default function App() {
     setAuthMode("login");
     setAuthPassword("");
     setActiveTab("login");
+  }
+
+  function toggleTheme() {
+    setTheme((prevTheme) => (prevTheme === "dark" ? "light" : "dark"));
   }
 
   async function handleAuthSubmit(e) {
@@ -175,39 +177,6 @@ export default function App() {
     }
   }
 
-  async function loadAdminAnalytics(token = authToken) {
-    if (!token) return;
-
-    try {
-      setError("");
-      setIsAnalyticsLoading(true);
-      const data = await fetchAdminAnalytics(token);
-      setAdminAnalytics(data);
-    } catch (e) {
-      setError(e.message || "Ошибка загрузки аналитики");
-    } finally {
-      setIsAnalyticsLoading(false);
-    }
-  }
-
-  async function onBecomeAdmin() {
-    if (!authToken || isPromotingToAdmin || currentUser?.role === "admin") return;
-
-    try {
-      setError("");
-      setIsPromotingToAdmin(true);
-      const data = await becomeAdmin(authToken);
-      localStorage.setItem(TOKEN_KEY, data.access_token);
-      setAuthToken(data.access_token);
-      setCurrentUser(data.user);
-      setActiveTab("analytics");
-    } catch (e) {
-      setError(e.message || "Не удалось выдать права администратора");
-    } finally {
-      setIsPromotingToAdmin(false);
-    }
-  }
-
   async function onCreateChat(e) {
     e.preventDefault();
     if (!newChatTitle.trim() || !authToken) return;
@@ -266,38 +235,41 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="logo">LexigenAI</div>
-        <nav className="nav">
-          {currentUser
-            ? navItems.map((item) => (
-                <button
-                  key={item.key}
-                  className={`nav-btn ${activeTab === item.key ? "active" : ""}`}
-                  onClick={() => setActiveTab(item.key)}
-                >
-                  {item.label}
-                </button>
-              ))
-            : [
-                { key: "login", label: "Вход" },
-                { key: "register", label: "Регистрация" },
-              ].map((item) => (
-                <button
-                  key={item.key}
-                  className={`nav-btn ${authMode === item.key ? "active" : ""}`}
-                  onClick={() => {
-                    setAuthMode(item.key);
-                    setActiveTab(item.key);
-                    setAuthPassword("");
-                    setAuthPasswordConfirm("");
-                    setShowLoginPassword(false);
-                    setShowRegisterPassword(false);
-                    setError("");
-                  }}
-                >
-                  {item.label}
-                </button>
-              ))}
-        </nav>
+        <div className="topbar-right">
+          <nav className="nav">
+            {currentUser
+              ? navItems.map((item) => (
+                  <button
+                    key={item.key}
+                    className={`nav-btn ${activeTab === item.key ? "active" : ""}`}
+                    onClick={() => setActiveTab(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))
+              : [
+                  { key: "login", label: "Вход" },
+                  { key: "register", label: "Регистрация" },
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    className={`nav-btn ${authMode === item.key ? "active" : ""}`}
+                    onClick={() => {
+                      setAuthMode(item.key);
+                      setActiveTab(item.key);
+                      setAuthPassword("");
+                      setAuthPasswordConfirm("");
+                      setError("");
+                    }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+          </nav>
+          <button type="button" className="theme-toggle-btn" onClick={toggleTheme}>
+            {isLightTheme ? "Тёмная тема" : "Светлая тема"}
+          </button>
+        </div>
       </header>
 
       <main className={`page ${activeTab === "chats" ? "chats-page" : ""}`}>
@@ -312,20 +284,14 @@ export default function App() {
                 required
               />
               <input
-                type={showLoginPassword ? "text" : "password"}
+                type="password"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
                 placeholder="Пароль"
                 required
               />
-              <label className="password-toggle">
-                <input
-                  type="checkbox"
-                  checked={showLoginPassword}
-                  onChange={(e) => setShowLoginPassword(e.target.checked)}
-                />{" "}
-                Показать пароль
-              </label>              <button type="submit">Войти</button>            </form>
+              <button type="submit">Войти</button>
+            </form>
           </section>
         )}
 
@@ -346,27 +312,21 @@ export default function App() {
                 required
               />
               <input
-                type={showRegisterPassword ? "text" : "password"}
+                type="password"
                 value={authPassword}
                 onChange={(e) => setAuthPassword(e.target.value)}
                 placeholder="Пароль"
                 required
               />
               <input
-                type={showRegisterPassword ? "text" : "password"}
+                type="password"
                 value={authPasswordConfirm}
                 onChange={(e) => setAuthPasswordConfirm(e.target.value)}
                 placeholder="Подтверждение пароля"
                 required
               />
-              <label className="password-toggle">
-                <input
-                  type="checkbox"
-                  checked={showRegisterPassword}
-                  onChange={(e) => setShowRegisterPassword(e.target.checked)}
-                />{" "}
-                Показать пароль
-              </label>              <button type="submit">Создать аккаунт</button>            </form>
+              <button type="submit">Создать аккаунт</button>
+            </form>
           </section>
         )}
 
@@ -391,16 +351,6 @@ export default function App() {
             <p>Имя: {currentUser.name}</p>
             <p>Email: {currentUser.email}</p>
             <p>Роль: {currentUser.role}</p>
-            {currentUser.role !== "admin" && (
-              <button
-                type="button"
-                className="profile-admin-btn"
-                onClick={onBecomeAdmin}
-                disabled={isPromotingToAdmin}
-              >
-                {isPromotingToAdmin ? "Выдаём права администратора..." : "Стать админом (временно)"}
-              </button>
-            )}
             <button type="button" className="profile-logout-btn" onClick={handleLogout}>
               Выйти из аккаунта
             </button>
@@ -410,14 +360,7 @@ export default function App() {
         {currentUser && currentUser.role === "admin" && activeTab === "analytics" && (
           <section className="card stub">
             <h2>Аналитика</h2>
-            {isAnalyticsLoading && <p>Загрузка аналитики...</p>}
-            {!isAnalyticsLoading && adminAnalytics && (
-              <>
-                <p>Пользователей: {adminAnalytics.users_count}</p>
-                <p>Чатов: {adminAnalytics.chats_count}</p>
-                <p>Сообщений: {adminAnalytics.messages_count}</p>
-              </>
-            )}
+            <p>Раздел доступен только администратору.</p>
           </section>
         )}
 
