@@ -5,10 +5,13 @@ from qdrant_client.http.models import Distance
 
 from backend.modules.rag.chuncking import HybridLegalChunker
 from backend.modules.rag.dense_retriever_service import Retriever
+from backend.modules.rag.generator import ContextCleaner, LaborPromptBuilder, QwenClient, Generator
 from backend.modules.rag.index_service import IndexService
 from backend.modules.rag.ingestion_service import MarkdownDocumentLoader, IngestionPipeline, IngestionService
 from backend.modules.rag.rag_embedder import Embedder
+from backend.modules.rag.rag_service import RAGService
 from backend.modules.rag.reranker_service import Reranker
+from backend.modules.rag.search_result_service import SearchResult
 from backend.modules.rag.storage import VectorStore
 
 
@@ -116,7 +119,7 @@ class RAG:
             min_final_score=0.50
         )
 
-    def build_and_index(self) -> List:
+    def build_and_index(self) -> list:
         """
         Load chunks and index them if collection is empty.
 
@@ -137,7 +140,7 @@ class RAG:
 
     def index_if_needed(
         self,
-        chunks: List
+        chunks: list
     ) -> None:
         """
         Index chunks only if collection is empty.
@@ -183,7 +186,7 @@ class RAG:
         retrieve_top_k: int = 20,
         rerank_top_n: int = 5,
         use_reranker: bool = True
-    ) -> List[SearchResult]:
+    ) -> list[SearchResult]:
         """
         Perform retrieval and optional reranking.
 
