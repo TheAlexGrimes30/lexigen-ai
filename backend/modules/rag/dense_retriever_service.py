@@ -1,0 +1,267 @@
+import hashlib
+from abc import abstractmethod, ABC
+
+from backend.modules.rag.rag_embedder import Embedder
+from backend.modules.rag.search_result_service import SearchResult
+
+
+class BaseDenseRetriever(ABC):
+    """
+    Abstract interface for dense vector retrievers.
+
+    Dense retrievers perform semantic similarity search
+    using embedding vectors.
+    """
+
+    @abstractmethod
+    def search(
+        self,
+        query_vec: list[float],
+        k: int
+    ) -> list[SearchResult]:
+        """
+        Execute dense vector similarity search.
+
+        Args:
+            query_vec (List[float]):
+                Query embedding vector.
+
+            k (int):
+                Number of documents to retrieve.
+
+        Returns:
+            List[SearchResult]:
+                Retrieved search results.
+        """
+
+        raise NotImplementedError
+
+
+class BaseRetriever(ABC):
+    """
+    Abstract interface for retrievers.
+
+    Retriever converts text query into embeddings
+    and returns relevant search results.
+    """
+
+    @abstractmethod
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 10
+    ) -> list[SearchResult]:
+        """
+        Retrieve relevant chunks for a query.
+
+        Args:
+            query (str):
+                User query.
+
+            top_k (int):
+                Number of chunks to return.
+
+        Returns:
+            List[SearchResult]:
+                Retrieved chunks.
+        """
+
+        raise NotImplementedError
+
+
+class QdrantDenseRetriever(BaseDenseRetriever):
+
+    def __init__(self, vector_store):
+        self.vector_store = vector_store
+
+    def search(
+        self,
+        query_vec: list[float],
+        k: int
+    ) -> list[SearchResult]:
+
+        hits = self.vector_store.search(
+            query_vector=query_vec,
+            limit=k
+        )
+
+        results = []
+
+        for hit in hits:
+
+            sr = SearchResult.from_qdrant(hit)
+
+            if sr.text and sr.text.strip():
+                results.append(sr)
+
+        return results
+
+
+class Retriever(BaseRetriever):
+
+    def __init__(
+        self,
+        vector_store,
+        embedder: Embedder,
+        *,
+        pool_multiplier: int = 8,
+        max_pool_size: int = 80,
+        min_text_len: int = 40
+    ):
+
+        self.vector_store = vector_store
+        self.embedder = embedder
+
+        self.dense = QdrantDenseRetriever(
+            vector_store
+        )
+
+        self.pool_multiplier = pool_multiplier
+        self.max_pool_size = max_pool_size
+        self.min_text_len = min_text_len
+
+    def retrieve(
+        self,
+        query: str,
+        top_k: int = 10
+    ) -> list[SearchResult]:
+
+        query = (query or "").strip()
+
+        if not query:
+            return []
+
+        query_vec = self.embedder.encode_queries(
+            [query]
+        )[0]
+
+        pool_size = min(
+            self.max_pool_size,
+            max(top_k * self.pool_multiplier, 30)
+        )
+
+        candidates = self.dense.search(
+            query_vec=query_vec,
+            k=pool_size
+        )
+
+        candidates = self._basic_filter(
+            candidates
+        )
+
+        return candidates[:top_k]
+
+    def _basic_filter(
+        self,
+        hits: list[SearchResult]
+    ) -> list[SearchResult]:
+
+        seen: set[str] = set()
+
+        result: list[SearchResult] = []
+
+        for h in hits:
+
+            text = (h.text or "").strip()
+
+            if len(text) < self.min_text_len:
+                continue
+
+            key = (
+                h.id
+                or hashlib.md5(
+                    text[:200].encode()
+                ).hexdigest()
+            )
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+
+            result.append(h)
+
+        return result
+
+    def debug_query(
+            self,
+            query: str,
+            top_k: int = 10
+    ):
+
+        print("\n" + "=" * 100)
+
+        print(f"[DENSE RETRIEVAL DEBUG]")
+
+        print(f"QUERY: {query}")
+
+        print("=" * 100)
+
+        query = (query or "").strip()
+
+        if not query:
+            print("Empty query")
+
+            return
+
+        query_vec = self.embedder.encode_queries(
+            [query]
+        )[0]
+
+        hits = self.dense.search(
+            query_vec=query_vec,
+            k=top_k
+        )
+
+        hits = self._basic_filter(hits)
+
+        if not hits:
+            print("No hits")
+
+            return
+
+        for i, h in enumerate(
+                hits,
+                start=1
+        ):
+            payload = h.payload or {}
+
+            article = payload.get(
+                "article_number",
+                "unknown"
+            )
+
+            header = payload.get(
+                "header",
+                "unknown"
+            )
+
+            print("\n" + "-" * 100)
+
+            print(f"TOP {i}")
+
+            print(
+                f"SCORE   : "
+                f"{h.score:.4f}"
+            )
+
+            print(
+                f"ARTICLE : "
+                f"{article}"
+            )
+
+            print(
+                f"HEADER  : "
+                f"{header}"
+            )
+
+            print(
+                f"ID      : "
+                f"{h.id}"
+            )
+
+            print("\nTEXT:\n")
+
+            print(
+                (h.text or "")[:1200]
+            )
