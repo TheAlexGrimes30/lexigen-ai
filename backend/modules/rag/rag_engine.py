@@ -62,7 +62,7 @@ class RAG:
 
 
         self.embedder = Embedder(
-            model_name="Qwen/Qwen3-Embedding-0.6B",
+            model_name=str(project_root / "models" / "Qwen3-Embedding-0.6B"),
             normalize=True
         )
 
