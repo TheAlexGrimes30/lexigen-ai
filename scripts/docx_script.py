@@ -1,3 +1,5 @@
+import re
+
 from docx import Document
 
 
@@ -19,7 +21,27 @@ class DocxParser:
             if text:
                 parts.append(text)
 
-        return "\n".join(parts)
+        text = "\n".join(parts)
+
+        return self.clean_text(text)
+
+    def clean_text(
+        self,
+        text: str
+    ) -> str:
+
+        text = re.sub(
+            r"5\. РЕКВИЗИТЫ И ПОДПИСИ СТОРОН.*",
+            "",
+            text,
+            flags=re.DOTALL
+        )
+
+        text = text.replace("\xa0", " ")
+        text = re.sub(r"\n{2,}", "\n", text)
+        text = re.sub(r"[ \t]+", " ", text)
+
+        return text.strip()
 
 
 if __name__ == "__main__":
@@ -30,10 +52,4 @@ if __name__ == "__main__":
         "filled_credit_financing_contract.docx"
     )
 
-    print("\n" + "=" * 100)
-    print("TEXT FROM DOCX")
-    print("=" * 100 + "\n")
-
     print(text)
-
-    print("\n" + "=" * 100)
