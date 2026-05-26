@@ -59,7 +59,7 @@ class QwenClient(BaseLLMClient):
             model_path=str(model_path),
             n_ctx=4096,
             n_threads=8,
-            verbose=True,
+            verbose=False
         )
 
     def generate(self, prompt: str) -> str:
