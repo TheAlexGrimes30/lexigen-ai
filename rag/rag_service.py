@@ -12,7 +12,7 @@ class RAGService:
             retriever,
             reranker,
             generator,
-            max_context_chars: int = 3500,
+            max_context_chars: int = 1200,
             min_final_score: float = 0.50
     ):
         self.retriever = retriever
@@ -24,8 +24,8 @@ class RAGService:
 
     def ask(self, query: str) -> RAGResponse:
 
-        hits = self.retriever.retrieve(query=query, top_k=25)
-        reranked = self.reranker.rerank(query=query, hits=hits, top_n=10)
+        hits = self.retriever.retrieve(query=query, top_k=8)
+        reranked = hits[:4]
 
         filtered = self._filter_hits(reranked)
 

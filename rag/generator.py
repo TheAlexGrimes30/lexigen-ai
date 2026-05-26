@@ -57,7 +57,7 @@ class QwenClient(BaseLLMClient):
     def __init__(self, model_path: str):
         self.llm = Llama(
             model_path=str(model_path),
-            n_ctx=4096,
+            n_ctx=2048,
             n_threads=8,
             verbose=False
         )
@@ -85,7 +85,7 @@ class QwenClient(BaseLLMClient):
             temperature=0.15,
             top_p=0.85,
             repeat_penalty=1.1,
-            max_tokens=512
+            max_tokens=400
         )
 
         return output["choices"][0]["message"]["content"].strip()
@@ -131,31 +131,17 @@ class LaborPromptBuilder(BasePromptBuilder):
 
 class ContractRiskAnalysisPromptBuilder(BasePromptBuilder):
 
-    def build(
-        self,
-        query: str,
-        context: str
-    ) -> str:
-
+    def build(self, query: str, context: str) -> str:
         return f"""
-        Ты юридический аналитик по кредитным договорам.
+        Проанализируй договор по нормам ГК РФ из контекста.
         
-        Используй только:
-        1. нормы ГК РФ из контекста;
-        2. текст договора.
+        Пиши кратко. Ответ строго в 4 строки. Без длинных объяснений.
         
-        Не используй внешние знания.
-        Не выдумывай статьи.
-        Не объясняй ход мыслей.
-        
-        Ответ дай строго по структуре:
-        
-        1. Краткий вывод
-        2. Риски договора
-        3. Слабые условия
-        4. Отсутствующие условия
-        5. Рекомендации
-        6. Уровень риска: низкий / средний / высокий
+        Формат:
+        1. Вывод: ...
+        2. Риски: ...
+        3. Слабые условия: ...
+        4. Рекомендации: ...
         
         КОНТЕКСТ:
         {context}
