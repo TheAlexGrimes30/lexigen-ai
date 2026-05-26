@@ -57,7 +57,7 @@ class QwenClient(BaseLLMClient):
     def __init__(self, model_path: str):
         self.llm = Llama(
             model_path=str(model_path),
-            n_ctx=4096,
+            n_ctx=2048,
             n_threads=8,
             verbose=False
         )
@@ -85,7 +85,7 @@ class QwenClient(BaseLLMClient):
             temperature=0.15,
             top_p=0.85,
             repeat_penalty=1.1,
-            max_tokens=512
+            max_tokens=400
         )
 
         return output["choices"][0]["message"]["content"].strip()
@@ -129,6 +129,28 @@ class LaborPromptBuilder(BasePromptBuilder):
         """.strip()
 
 
+class ContractRiskAnalysisPromptBuilder(BasePromptBuilder):
+
+    def build(self, query: str, context: str) -> str:
+        return f"""
+        Проанализируй договор по нормам ГК РФ из контекста.
+        
+        Пиши кратко. Ответ строго в 4 строки. Без длинных объяснений.
+        
+        Формат:
+        1. Вывод: ...
+        2. Риски: ...
+        3. Слабые условия: ...
+        4. Рекомендации: ...
+        
+        КОНТЕКСТ:
+        {context}
+        
+        ДОГОВОР:
+        {query}
+        
+        ОТВЕТ:
+        """.strip()
 
 class Generator(BaseGenerator):
 
