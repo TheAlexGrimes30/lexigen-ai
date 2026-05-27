@@ -4,6 +4,8 @@ from backend.db import SubscriptionPlan
 
 
 class SubscriptionPlanResponse(BaseModel):
+    """DTO ответа с данными тарифного плана."""
+
     plan: SubscriptionPlan
     title: str
     price_rub: int
@@ -11,10 +13,14 @@ class SubscriptionPlanResponse(BaseModel):
 
 
 class SubscriptionUpdateRequest(BaseModel):
+    """DTO запроса изменения подписки пользователя."""
+
     plan: SubscriptionPlan = Field(description="Выбранный тариф")
 
 
 class SubscriptionResponse(BaseModel):
+    """DTO ответа с текущей подпиской пользователя."""
+
     plan: SubscriptionPlan | None
     title: str
     price_rub: int

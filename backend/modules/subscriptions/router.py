@@ -1,11 +1,14 @@
-from fastapi import Depends, APIRouter
+from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db import User
 from backend.db.database import get_db
 from backend.modules.auth.dependencies import get_current_user
-from backend.modules.subscriptions.schema import SubscriptionResponse, SubscriptionUpdateRequest, \
-    SubscriptionPlanResponse
+from backend.modules.subscriptions.schema import (
+    SubscriptionPlanResponse,
+    SubscriptionResponse,
+    SubscriptionUpdateRequest,
+)
 from backend.modules.subscriptions.service import subscriptions_service
 
 router = APIRouter(
@@ -19,6 +22,7 @@ router = APIRouter(
     response_model=list[SubscriptionPlanResponse],
 )
 async def get_subscription_plans():
+    """Возвращает список доступных тарифных планов."""
     return subscriptions_service.list_plans()
 
 
@@ -30,9 +34,10 @@ async def get_my_subscription(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Возвращает текущую подписку пользователя."""
     return await subscriptions_service.get_user_subscription_response(
-        db,
-        current_user,
+        db=db,
+        user=current_user,
     )
 
 
@@ -45,8 +50,9 @@ async def put_my_subscription(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """Изменяет текущую подписку пользователя."""
     return await subscriptions_service.set_user_subscription(
-        db,
-        current_user,
-        payload.plan,
+        db=db,
+        user=current_user,
+        plan=payload.plan,
     )

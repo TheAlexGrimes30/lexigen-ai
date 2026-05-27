@@ -1,81 +1,60 @@
-from sqlalchemy import delete, select
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db import Subscription, SubscriptionPlan, User, UserRole
-from backend.modules.subscriptions.constants import SUBSCRIPTION_PLANS
+from backend.db import Subscription, SubscriptionPlan, User
+from backend.modules.subscriptions.interfaces import (
+    BaseSubscriptionPlansProvider,
+    BaseSubscriptionsRepository,
+    BaseSubscriptionsService,
+)
+from backend.modules.subscriptions.mapper import SubscriptionMapper
+from backend.modules.subscriptions.plans import SubscriptionPlansProvider
+from backend.modules.subscriptions.repository import SubscriptionsRepository
 
 
-class SubscriptionsService:
+class SubscriptionsService(BaseSubscriptionsService):
     """Сервис подписок пользователя."""
 
-    def list_plans(self) -> list[dict]:
-        return [
-            {
-                "plan": plan,
-                **data,
-            }
-            for plan, data in SUBSCRIPTION_PLANS.items()
-        ]
-
-    async def get_user_subscription(
+    def __init__(
         self,
-        db: AsyncSession,
-        user_id,
-    ) -> Subscription | None:
-        stmt = select(Subscription).where(
-            Subscription.user_id == user_id,
-            Subscription.is_active.is_(True),
+        repository: BaseSubscriptionsRepository,
+        plans_provider: BaseSubscriptionPlansProvider,
+        mapper: SubscriptionMapper,
+    ) -> None:
+        """Инициализирует сервис подписок."""
+        self.repository = repository
+        self.plans_provider = plans_provider
+        self.mapper = mapper
+
+    def list_plans(self) -> list[dict]:
+        """Возвращает список доступных тарифов."""
+        return self.plans_provider.list_plans()
+
+    async def get_user_subscription(self, db: AsyncSession, user_id: UUID) -> Subscription | None:
+        """Возвращает активную подписку пользователя."""
+        return await self.repository.get_active_by_user_id(
+            db=db,
+            user_id=user_id,
         )
 
-        result = await db.execute(stmt)
-
-        return result.scalar_one_or_none()
-
-    async def get_user_subscription_response(
-        self,
-        db: AsyncSession,
-        user: User,
-    ) -> dict:
+    async def get_user_subscription_response(self, db: AsyncSession, user: User) -> dict:
+        """Возвращает DTO текущей подписки пользователя."""
         subscription = await self.get_user_subscription(
-            db,
-            user.id,
+            db=db,
+            user_id=user.id,
         )
 
         if subscription is None:
-            return {
-                "plan": None,
-                "title": "Без подписки",
-                "price_rub": 0,
-                "is_active": False,
-                "can_analyze_unlimited": user.role == UserRole.admin,
-            }
+            return self.mapper.empty_response(user)
 
-        plan_data = SUBSCRIPTION_PLANS[subscription.plan_name]
+        return self.mapper.active_response(subscription)
 
-        return {
-            "plan": subscription.plan_name,
-            "title": plan_data["title"],
-            "price_rub": plan_data["price_rub"],
-            "is_active": subscription.is_active,
-            "can_analyze_unlimited": True,
-        }
-
-    async def set_user_subscription(
-        self,
-        db: AsyncSession,
-        user: User,
-        plan: SubscriptionPlan,
-    ) -> dict:
-        """
-        Меняет подписку пользователя.
-
-        Старые подписки физически удаляются, затем создаётся новая активная.
-        """
-
-        await db.execute(
-            delete(Subscription).where(
-                Subscription.user_id == user.id,
-            )
+    async def set_user_subscription(self, db: AsyncSession, user: User, plan: SubscriptionPlan) -> dict:
+        """Меняет подписку пользователя с удалением предыдущих подписок."""
+        await self.repository.delete_by_user_id(
+            db=db,
+            user_id=user.id,
         )
 
         subscription = Subscription(
@@ -84,26 +63,34 @@ class SubscriptionsService:
             is_active=True,
         )
 
-        db.add(subscription)
-
-        await db.commit()
-
-        return await self.get_user_subscription_response(
-            db,
-            user,
+        await self.repository.add(
+            db=db,
+            subscription=subscription,
         )
 
-    async def user_has_paid_subscription(
-        self,
-        db: AsyncSession,
-        user_id,
-    ) -> bool:
+        await self.repository.commit(db)
+
+        return await self.get_user_subscription_response(
+            db=db,
+            user=user,
+        )
+
+    async def user_has_paid_subscription(self, db: AsyncSession, user_id: UUID) -> bool:
+        """Проверяет наличие активной подписки пользователя."""
         subscription = await self.get_user_subscription(
-            db,
-            user_id,
+            db=db,
+            user_id=user_id,
         )
 
         return subscription is not None
 
 
-subscriptions_service = SubscriptionsService()
+_subscription_plans_provider = SubscriptionPlansProvider()
+
+subscriptions_service = SubscriptionsService(
+    repository=SubscriptionsRepository(),
+    plans_provider=_subscription_plans_provider,
+    mapper=SubscriptionMapper(
+        plans_provider=_subscription_plans_provider,
+    ),
+)

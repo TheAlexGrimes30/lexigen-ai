@@ -1,11 +1,9 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db.analysis_result import AnalysisResult
 from backend.db.database import get_db
 from backend.db.users import User
 from backend.modules.analytics.service import analysis_report_service
@@ -16,28 +14,19 @@ router = APIRouter(
     tags=["analysis-results"],
 )
 
+
 @router.get("/{analysis_id}/download")
 async def download_analysis_result(
     analysis_id: UUID,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
+    """Скачивает DOCX-отчёт результата анализа текущего пользователя."""
 
-    stmt = select(AnalysisResult).where(
-        AnalysisResult.id == analysis_id,
-        AnalysisResult.generated_by_user_id == current_user.id,
-    )
-
-    result = await db.scalar(stmt)
-
-    if not result:
-        raise HTTPException(
-            status_code=404,
-            detail="Результат анализа не найден",
-        )
-
-    buffer = analysis_report_service.build_docx(
-        result.summary
+    buffer = await analysis_report_service.build_user_docx_report(
+        db=db,
+        analysis_id=analysis_id,
+        user_id=current_user.id,
     )
 
     return StreamingResponse(
@@ -47,7 +36,8 @@ async def download_analysis_result(
             "wordprocessingml.document"
         ),
         headers={
-            "Content-Disposition":
+            "Content-Disposition": (
                 "attachment; filename=analysis_result.docx"
+            ),
         },
     )

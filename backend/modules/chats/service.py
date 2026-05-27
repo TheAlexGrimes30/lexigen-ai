@@ -1,10 +1,15 @@
 from uuid import UUID
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.chats import Chat
 from backend.db.users import User
+from backend.modules.chats.interfaces import (
+    BaseChatsRepository,
+    BaseChatsService,
+)
+from backend.modules.chats.mapper import ChatMapper
+from backend.modules.chats.repository import ChatsRepository
 from backend.modules.chats.schema import (
     ChatCreateRequest,
     ChatResponse,
@@ -12,22 +17,28 @@ from backend.modules.chats.schema import (
 )
 
 
-class ChatsService:
+class ChatsService(BaseChatsService):
+    """Сервис бизнес-логики чатов."""
+
+    def __init__(
+        self,
+        repository: BaseChatsRepository,
+        mapper: ChatMapper,
+    ) -> None:
+        """Инициализирует сервис чатов."""
+        self.repository = repository
+        self.mapper = mapper
 
     async def list_chats(
         self,
         db: AsyncSession,
         current_user: User,
     ) -> list[Chat]:
-        stmt = (
-            select(Chat)
-            .where(Chat.user_id == current_user.id)
-            .order_by(Chat.created_at.desc())
+        """Возвращает список чатов текущего пользователя."""
+        return await self.repository.list_by_user(
+            db=db,
+            user_id=current_user.id,
         )
-
-        result = await db.execute(stmt)
-
-        return list(result.scalars().all())
 
     async def create_chat(
         self,
@@ -35,17 +46,16 @@ class ChatsService:
         title: str,
         current_user: User,
     ) -> Chat:
+        """Создаёт новый чат для текущего пользователя."""
         chat = Chat(
             title=title,
             user_id=current_user.id,
         )
 
-        db.add(chat)
-
-        await db.commit()
-        await db.refresh(chat)
-
-        return chat
+        return await self.repository.add(
+            db=db,
+            chat=chat,
+        )
 
     async def get_chat(
         self,
@@ -53,14 +63,12 @@ class ChatsService:
         chat_id: UUID,
         current_user: User,
     ) -> Chat | None:
-        stmt = select(Chat).where(
-            Chat.id == chat_id,
-            Chat.user_id == current_user.id,
+        """Возвращает чат текущего пользователя по идентификатору."""
+        return await self.repository.get_by_id_and_user(
+            db=db,
+            chat_id=chat_id,
+            user_id=current_user.id,
         )
-
-        result = await db.execute(stmt)
-
-        return result.scalar_one_or_none()
 
     async def update_chat(
         self,
@@ -69,6 +77,7 @@ class ChatsService:
         title: str,
         current_user: User,
     ) -> Chat | None:
+        """Изменяет название чата текущего пользователя."""
         chat = await self.get_chat(
             db=db,
             chat_id=chat_id,
@@ -80,10 +89,10 @@ class ChatsService:
 
         chat.title = title.strip()
 
-        await db.commit()
-        await db.refresh(chat)
-
-        return chat
+        return await self.repository.save(
+            db=db,
+            chat=chat,
+        )
 
     async def delete_chat(
         self,
@@ -91,17 +100,20 @@ class ChatsService:
         chat_id: UUID,
         current_user: User,
     ) -> bool:
+        """Удаляет чат текущего пользователя."""
         chat = await self.get_chat(
-            db,
-            chat_id,
-            current_user,
+            db=db,
+            chat_id=chat_id,
+            current_user=current_user,
         )
 
         if not chat:
             return False
 
-        await db.delete(chat)
-        await db.commit()
+        await self.repository.delete(
+            db=db,
+            chat=chat,
+        )
 
         return True
 
@@ -110,15 +122,13 @@ class ChatsService:
         db: AsyncSession,
         current_user: User,
     ) -> list[ChatResponse]:
+        """Возвращает DTO списка чатов текущего пользователя."""
         chats = await self.list_chats(
-            db,
-            current_user,
+            db=db,
+            current_user=current_user,
         )
 
-        return [
-            ChatResponse.model_validate(chat)
-            for chat in chats
-        ]
+        return self.mapper.to_response_list(chats)
 
     async def create_chat_response(
         self,
@@ -126,13 +136,14 @@ class ChatsService:
         payload: ChatCreateRequest,
         current_user: User,
     ) -> ChatResponse:
+        """Создаёт чат и возвращает DTO ответа."""
         chat = await self.create_chat(
-            db,
-            payload.title,
-            current_user,
+            db=db,
+            title=payload.title,
+            current_user=current_user,
         )
 
-        return ChatResponse.model_validate(chat)
+        return self.mapper.to_response(chat)
 
     async def update_chat_response(
         self,
@@ -141,6 +152,7 @@ class ChatsService:
         payload: ChatUpdateRequest,
         current_user: User,
     ) -> ChatResponse | None:
+        """Изменяет чат и возвращает DTO ответа."""
         chat = await self.update_chat(
             db=db,
             chat_id=chat_id,
@@ -151,7 +163,7 @@ class ChatsService:
         if not chat:
             return None
 
-        return ChatResponse.model_validate(chat)
+        return self.mapper.to_response(chat)
 
     async def delete_chat_response(
         self,
@@ -159,10 +171,11 @@ class ChatsService:
         chat_id: UUID,
         current_user: User,
     ) -> dict[str, str]:
+        """Удаляет чат и возвращает статус удаления."""
         deleted = await self.delete_chat(
-            db,
-            chat_id,
-            current_user,
+            db=db,
+            chat_id=chat_id,
+            current_user=current_user,
         )
 
         if not deleted:
@@ -171,4 +184,7 @@ class ChatsService:
         return {"status": "deleted"}
 
 
-chats_service = ChatsService()
+chats_service = ChatsService(
+    repository=ChatsRepository(),
+    mapper=ChatMapper(),
+)
