@@ -22,7 +22,7 @@ async def download_analysis_result(
     current_user: User = Depends(get_current_user),
 ) -> StreamingResponse:
     """Скачивает DOCX-отчёт результата анализа текущего пользователя."""
-    
+
     buffer = await analysis_report_service.build_user_docx_report(
         db=db,
         analysis_id=analysis_id,
