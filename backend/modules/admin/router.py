@@ -22,4 +22,5 @@ async def get_admin_analytics(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_admin_user),
 ):
+    """Возвращает административную аналитику по пользователям и подпискам."""
     return await admin_service.get_users_by_subscription_analytics(db)

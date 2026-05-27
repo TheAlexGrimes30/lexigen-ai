@@ -23,7 +23,7 @@ class AdminAnalyticsRepository:
         db: AsyncSession,
     ) -> list[tuple[object, int]]:
         """Возвращает количество пользователей по активным подпискам."""
-        
+
         stmt = (
             select(
                 Subscription.plan_name,
