@@ -13,6 +13,12 @@ function authHeaders(token) {
   };
 }
 
+function authOnlyHeaders(token) {
+  return {
+    Authorization: `Bearer ${token}`,
+  };
+}
+
 function sleep(ms) {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -28,7 +34,6 @@ async function fetchWithRetry(
   try {
     return await fetch(url, options);
   } catch (error) {
-
     if (retries <= 0) {
       throw error;
     }
@@ -45,7 +50,6 @@ async function fetchWithRetry(
 }
 
 async function parseOrThrow(response, fallbackMessage) {
-
   if (response.ok) {
     return response.json();
   }
@@ -53,13 +57,11 @@ async function parseOrThrow(response, fallbackMessage) {
   let detail = fallbackMessage;
 
   try {
-
     const data = await response.json();
 
     if (typeof data?.detail === "string") {
       detail = data.detail;
     }
-
   } catch {
     // ignore
   }
@@ -68,7 +70,6 @@ async function parseOrThrow(response, fallbackMessage) {
 }
 
 export async function register(payload) {
-
   const response = await fetchWithRetry(
     `${API_BASE}/api/auth/register`,
     {
@@ -87,7 +88,6 @@ export async function register(payload) {
 }
 
 export async function login(payload) {
-
   const response = await fetchWithRetry(
     `${API_BASE}/api/auth/login`,
     {
@@ -106,7 +106,6 @@ export async function login(payload) {
 }
 
 export async function fetchMe(token) {
-
   const response = await fetchWithRetry(
     `${API_BASE}/api/auth/me`,
     {
@@ -121,7 +120,6 @@ export async function fetchMe(token) {
 }
 
 export async function becomeAdmin(token) {
-
   const response = await fetchWithRetry(
     `${API_BASE}/api/auth/become-admin`,
     {
@@ -137,7 +135,6 @@ export async function becomeAdmin(token) {
 }
 
 export async function fetchAdminAnalytics(token) {
-
   const response = await fetchWithRetry(
     `${API_BASE}/api/auth/admin/analytics`,
     {
@@ -152,7 +149,6 @@ export async function fetchAdminAnalytics(token) {
 }
 
 export async function fetchChats(token) {
-
   const response = await fetchWithRetry(
     `${API_BASE}/api/chats`,
     {
@@ -167,7 +163,6 @@ export async function fetchChats(token) {
 }
 
 export async function createChat(title, token) {
-
   const response = await fetchWithRetry(
     `${API_BASE}/api/chats`,
     {
@@ -184,7 +179,6 @@ export async function createChat(title, token) {
 }
 
 export async function deleteChat(chatId, token) {
-
   const response = await fetchWithRetry(
     `${API_BASE}/api/chats/${chatId}`,
     {
@@ -200,7 +194,6 @@ export async function deleteChat(chatId, token) {
 }
 
 export async function fetchMessages(chatId, token) {
-
   const response = await fetchWithRetry(
     `${API_BASE}/api/chats/${chatId}/messages`,
     {
@@ -214,14 +207,21 @@ export async function fetchMessages(chatId, token) {
   );
 }
 
-export async function sendMessage(chatId, content, token) {
+export async function sendMessage(chatId, content, file, token) {
+  const formData = new FormData();
+
+  formData.append("content", content || "");
+
+  if (file) {
+    formData.append("file", file);
+  }
 
   const response = await fetchWithRetry(
     `${API_BASE}/api/chats/${chatId}/messages`,
     {
       method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify({ content }),
+      headers: authOnlyHeaders(token),
+      body: formData,
     }
   );
 
@@ -229,4 +229,35 @@ export async function sendMessage(chatId, content, token) {
     response,
     "Не удалось отправить сообщение"
   );
+}
+
+export async function downloadAnalysisResult(
+  analysisId,
+  format,
+  token
+) {
+  const response = await fetchWithRetry(
+    `${API_BASE}/api/analysis-results/${analysisId}/download?format=${format}`,
+    {
+      headers: authOnlyHeaders(token),
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error("Не удалось скачать результат анализа");
+  }
+
+  const blob = await response.blob();
+  const extension = format === "pdf" ? "pdf" : "docx";
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+
+  link.href = url;
+  link.download = `analysis_result.${extension}`;
+
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  window.URL.revokeObjectURL(url);
 }
