@@ -2,24 +2,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db import SubscriptionPlan, Subscription, User, UserRole
-
-SUBSCRIPTION_PLANS = {
-    SubscriptionPlan.basic: {
-        "title": "Basic",
-        "price_rub": 1000,
-        "description": "Базовый доступ к анализу документов.",
-    },
-    SubscriptionPlan.pro: {
-        "title": "Pro",
-        "price_rub": 5000,
-        "description": "Расширенный доступ для регулярной работы с договорами.",
-    },
-    SubscriptionPlan.enterprise: {
-        "title": "Enterprise",
-        "price_rub": 20000,
-        "description": "Корпоративный тариф для команд и бизнеса.",
-    },
-}
+from backend.modules.subscriptions.constants import SUBSCRIPTION_PLANS
 
 
 class SubscriptionsService:
