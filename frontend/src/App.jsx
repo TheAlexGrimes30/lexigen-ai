@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createChat,
   deleteChat,
+  downloadAnalysisResult,
   fetchChats,
   fetchMe,
   fetchMessages,
@@ -15,14 +16,21 @@ const THEME_KEY = "lexigen_theme";
 
 function getInitialTheme() {
   const savedTheme = localStorage.getItem(THEME_KEY);
-  return savedTheme === "light" || savedTheme === "dark" ? savedTheme : "dark";
+
+  return savedTheme === "light" || savedTheme === "dark"
+    ? savedTheme
+    : "dark";
 }
 
 export default function App() {
+  const fileInputRef = useRef(null);
+
   const [activeTab, setActiveTab] = useState("login");
   const [authMode, setAuthMode] = useState("login");
   const [theme, setTheme] = useState(getInitialTheme);
-  const [authToken, setAuthToken] = useState(localStorage.getItem(TOKEN_KEY) || "");
+  const [authToken, setAuthToken] = useState(
+    localStorage.getItem(TOKEN_KEY) || ""
+  );
   const [currentUser, setCurrentUser] = useState(null);
 
   const [authName, setAuthName] = useState("");
@@ -36,6 +44,7 @@ export default function App() {
   const [messages, setMessages] = useState([]);
   const [newChatTitle, setNewChatTitle] = useState("");
   const [messageText, setMessageText] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
   const [isMessageSending, setIsMessageSending] = useState(false);
   const [error, setError] = useState("");
   const [isChatSidebarVisible, setIsChatSidebarVisible] = useState(true);
@@ -77,16 +86,21 @@ export default function App() {
 
     bootstrapSession();
   }, [authToken]);
+
   useEffect(() => {
     if (!selectedChatId || !authToken) return;
+
     loadMessages(selectedChatId, authToken);
   }, [selectedChatId, authToken]);
 
   async function bootstrapSession() {
     try {
       setError("");
+
       const user = await fetchMe(authToken);
+
       setCurrentUser(user);
+
       await loadChats(authToken);
     } catch (e) {
       clearSession();
@@ -112,7 +126,9 @@ export default function App() {
   }
 
   function toggleTheme() {
-    setTheme((prevTheme) => (prevTheme === "dark" ? "light" : "dark"));
+    setTheme((prevTheme) => (
+      prevTheme === "dark" ? "light" : "dark"
+    ));
   }
 
   async function handleAuthSubmit(e) {
@@ -125,6 +141,7 @@ export default function App() {
 
     try {
       setError("");
+
       const payload =
         authMode === "register"
           ? {
@@ -133,10 +150,17 @@ export default function App() {
               password: authPassword,
               password_confirm: authPasswordConfirm,
             }
-          : { email: authEmail.trim(), password: authPassword };
+          : {
+              email: authEmail.trim(),
+              password: authPassword,
+            };
 
-      const data = authMode === "register" ? await register(payload) : await login(payload);
+      const data = authMode === "register"
+        ? await register(payload)
+        : await login(payload);
+
       localStorage.setItem(TOKEN_KEY, data.access_token);
+
       setAuthToken(data.access_token);
       setCurrentUser(data.user);
       setAuthPassword("");
@@ -153,12 +177,16 @@ export default function App() {
 
     try {
       setError("");
+
       const data = await fetchChats(token);
+
       setChats(data);
+
       if (!selectedChatId && data.length > 0) {
         setSelectedChatId(data[0].id);
       }
-      if (selectedChatId && !data.find((c) => c.id === selectedChatId)) {
+
+      if (selectedChatId && !data.find((chat) => chat.id === selectedChatId)) {
         setSelectedChatId(data[0]?.id || null);
       }
     } catch (e) {
@@ -171,7 +199,9 @@ export default function App() {
 
     try {
       setError("");
+
       const data = await fetchMessages(chatId, token);
+
       setMessages(data);
     } catch (e) {
       setError(e.message || "Ошибка загрузки сообщений");
@@ -181,12 +211,15 @@ export default function App() {
 
   async function onCreateChat(e) {
     e.preventDefault();
+
     if (!newChatTitle.trim() || !authToken) return;
 
     try {
       setError("");
+
       const chat = await createChat(newChatTitle.trim(), authToken);
       const updated = [chat, ...chats];
+
       setChats(updated);
       setSelectedChatId(chat.id);
       setNewChatTitle("");
@@ -196,29 +229,76 @@ export default function App() {
     }
   }
 
+  function onFileChange(e) {
+    const file = e.target.files?.[0] || null;
+
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+
+    const lowerName = file.name.toLowerCase();
+
+    if (!lowerName.endsWith(".docx") && !lowerName.endsWith(".pdf")) {
+      setError("Можно загрузить только DOCX или PDF");
+      e.target.value = "";
+      setSelectedFile(null);
+      return;
+    }
+
+    setError("");
+    setSelectedFile(file);
+  }
+
+  function clearSelectedFile() {
+    setSelectedFile(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
+
   async function onSendMessage(e) {
     e.preventDefault();
-    if (!selectedChatId || !messageText.trim() || !authToken || isMessageSending) return;
+
+    if (
+      !selectedChatId ||
+      (!messageText.trim() && !selectedFile) ||
+      !authToken ||
+      isMessageSending
+    ) {
+      return;
+    }
 
     const textToSend = messageText.trim();
+    const fileToSend = selectedFile;
 
     try {
       setError("");
       setIsMessageSending(true);
       setMessageText("");
+      clearSelectedFile();
 
       const optimisticMessage = {
         id: `local-${Date.now()}`,
         chat_id: selectedChatId,
         user_id: currentUser?.id || "local",
         role: "user",
-        content: textToSend,
+        content: fileToSend
+          ? `${textToSend || "Документ отправлен на анализ"}\nФайл: ${fileToSend.name}`
+          : textToSend,
         created_at: new Date().toISOString(),
       };
 
       setMessages((prev) => [...prev, optimisticMessage]);
 
-      const newMessages = await sendMessage(selectedChatId, textToSend, authToken);
+      const newMessages = await sendMessage(
+        selectedChatId,
+        textToSend,
+        fileToSend,
+        authToken
+      );
+
       setMessages((prev) => [
         ...prev.filter((msg) => msg.id !== optimisticMessage.id),
         ...newMessages,
@@ -230,13 +310,29 @@ export default function App() {
     }
   }
 
+  async function onDownloadAnalysis(analysisId) {
+    try {
+      setError("");
+
+      await downloadAnalysisResult(
+        analysisId,
+        authToken
+      );
+    } catch (e) {
+      setError(e.message || "Ошибка скачивания результата анализа");
+    }
+  }
+
   async function onDeleteChat(chatId) {
     if (!chatId || !authToken) return;
 
     try {
       setError("");
+
       await deleteChat(chatId, authToken);
+
       const updatedChats = chats.filter((chat) => chat.id !== chatId);
+
       setChats(updatedChats);
 
       if (updatedChats.length === 0) {
@@ -257,6 +353,7 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="logo">LexigenAI</div>
+
         <div className="topbar-right">
           <nav className="nav">
             {currentUser
@@ -288,7 +385,12 @@ export default function App() {
                   </button>
                 ))}
           </nav>
-          <button type="button" className="theme-toggle-btn" onClick={toggleTheme}>
+
+          <button
+            type="button"
+            className="theme-toggle-btn"
+            onClick={toggleTheme}
+          >
             {isLightTheme ? "Тёмная тема" : "Светлая тема"}
           </button>
         </div>
@@ -298,6 +400,7 @@ export default function App() {
         {!currentUser && authMode === "login" && (
           <section className="card auth-card">
             <h2>Страница входа</h2>
+
             <form onSubmit={handleAuthSubmit} className="auth-form">
               <input
                 value={authEmail}
@@ -305,6 +408,7 @@ export default function App() {
                 placeholder="Email"
                 required
               />
+
               <input
                 type={isPasswordVisible ? "text" : "password"}
                 value={authPassword}
@@ -312,6 +416,7 @@ export default function App() {
                 placeholder="Пароль"
                 required
               />
+
               <label className="password-toggle">
                 <span>Показать пароль</span>
                 <input
@@ -320,6 +425,7 @@ export default function App() {
                   onChange={(e) => setIsPasswordVisible(e.target.checked)}
                 />
               </label>
+
               <button type="submit">Войти</button>
             </form>
           </section>
@@ -328,6 +434,7 @@ export default function App() {
         {!currentUser && authMode === "register" && (
           <section className="card auth-card">
             <h2>Страница регистрации</h2>
+
             <form onSubmit={handleAuthSubmit} className="auth-form">
               <input
                 value={authName}
@@ -335,12 +442,14 @@ export default function App() {
                 placeholder="Имя"
                 required
               />
+
               <input
                 value={authEmail}
                 onChange={(e) => setAuthEmail(e.target.value)}
                 placeholder="Email"
                 required
               />
+
               <input
                 type={isPasswordVisible ? "text" : "password"}
                 value={authPassword}
@@ -348,6 +457,7 @@ export default function App() {
                 placeholder="Пароль"
                 required
               />
+
               <input
                 type={isPasswordVisible ? "text" : "password"}
                 value={authPasswordConfirm}
@@ -355,6 +465,7 @@ export default function App() {
                 placeholder="Подтверждение пароля"
                 required
               />
+
               <label className="password-toggle">
                 <span>Показать пароль</span>
                 <input
@@ -363,10 +474,12 @@ export default function App() {
                   onChange={(e) => setIsPasswordVisible(e.target.checked)}
                 />
               </label>
+
               <button type="submit">Создать аккаунт</button>
             </form>
           </section>
         )}
+
         {currentUser && activeTab === "home" && (
           <section className="card hero">
             <h1>Система анализа кредитных договоров</h1>
@@ -388,7 +501,12 @@ export default function App() {
             <p>Имя: {currentUser.name}</p>
             <p>Email: {currentUser.email}</p>
             <p>Роль: {currentUser.role}</p>
-            <button type="button" className="profile-logout-btn" onClick={handleLogout}>
+
+            <button
+              type="button"
+              className="profile-logout-btn"
+              onClick={handleLogout}
+            >
               Выйти из аккаунта
             </button>
           </section>
@@ -406,6 +524,7 @@ export default function App() {
             {isChatSidebarVisible && (
               <aside className="chat-sidebar card">
                 <h3>Ваши чаты</h3>
+
                 <form onSubmit={onCreateChat} className="new-chat-form">
                   <input
                     value={newChatTitle}
@@ -427,6 +546,7 @@ export default function App() {
                       >
                         {chat.title}
                       </button>
+
                       <button
                         type="button"
                         className="chat-item-delete"
@@ -448,6 +568,7 @@ export default function App() {
             <div className="chat-main card">
               <div className="chat-main-header">
                 <h3>{selectedChat ? selectedChat.title : "Выберите чат"}</h3>
+
                 <button
                   type="button"
                   className="toggle-sidebar-btn"
@@ -459,7 +580,9 @@ export default function App() {
 
               <div className="messages">
                 {messages.length === 0 && (
-                  <div className="empty-state">Сообщений пока нет. Начните диалог.</div>
+                  <div className="empty-state">
+                    Сообщений пока нет. Начните диалог.
+                  </div>
                 )}
 
                 {messages.map((msg) => (
@@ -468,10 +591,28 @@ export default function App() {
                       {msg.role === "user"
                         ? "Вы"
                         : msg.role === "assistant"
-                        ? "Ассистент"
-                        : "Система"}
+                          ? "Ассистент"
+                          : "Система"}
                     </div>
-                    <div>{msg.content}</div>
+
+                    <div className="message-content">
+                      {msg.content}
+                    </div>
+
+                    {msg.analysis_result_id && (
+                      <div className="analysis-actions">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onDownloadAnalysis(
+                              msg.analysis_result_id
+                            )
+                          }
+                        >
+                          Скачать DOCX
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
 
@@ -488,16 +629,56 @@ export default function App() {
               </div>
 
               <form onSubmit={onSendMessage} className="message-form">
+                <button
+                  type="button"
+                  className="attach-file-btn"
+                  disabled={!selectedChatId || isMessageSending}
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Добавить DOCX или PDF"
+                >
+                  +
+                </button>
+
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".docx,.pdf"
+                  className="hidden-file-input"
+                  onChange={onFileChange}
+                  disabled={!selectedChatId || isMessageSending}
+                />
+
                 <input
                   value={messageText}
                   onChange={(e) => setMessageText(e.target.value)}
-                  placeholder="Введите сообщение..."
+                  placeholder={
+                    selectedFile
+                      ? "Можно добавить комментарий к документу..."
+                      : "Введите сообщение..."
+                  }
                   disabled={!selectedChatId || isMessageSending}
                 />
-                <button type="submit" disabled={!selectedChatId || isMessageSending}>
-                  {isMessageSending ? "Ждём RAG..." : "Отправить"}
+
+                <button
+                  type="submit"
+                  disabled={!selectedChatId || isMessageSending}
+                >
+                  {isMessageSending ? "Обработка..." : "Отправить"}
                 </button>
               </form>
+
+              {selectedFile && (
+                <div className="selected-file">
+                  <span>Файл выбран: {selectedFile.name}</span>
+
+                  <button
+                    type="button"
+                    onClick={clearSelectedFile}
+                  >
+                    Убрать
+                  </button>
+                </div>
+              )}
             </div>
           </section>
         )}

@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, TYPE_CHECKING
 
-from sqlalchemy import UUID, ForeignKey, Text, String
+from sqlalchemy import UUID, ForeignKey, Text
 from sqlalchemy.orm import Mapped, relationship, mapped_column
 
 from backend.db.base import Base, TimestampMixin
@@ -14,12 +14,7 @@ if TYPE_CHECKING:
 class AnalysisResult(Base, TimestampMixin):
     __tablename__ = "analysis_results"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        primary_key=True,
-        default=uuid.uuid4
-    )
-
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     chat_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("chats.id", ondelete="CASCADE"),
@@ -41,31 +36,9 @@ class AnalysisResult(Base, TimestampMixin):
         index=True
     )
 
-    summary: Mapped[str] = mapped_column(
-        Text,
-        nullable=False
-    )
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    risks_found: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    recommendations: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    risks_found: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True
-    )
-
-    recommendations: Mapped[Optional[str]] = mapped_column(
-        Text,
-        nullable=True
-    )
-
-    report_file_path: Mapped[Optional[str]] = mapped_column(
-        String(1024),
-        nullable=True
-    )
-
-    messages: Mapped[list["Message"]] = relationship(
-        back_populates="analysis_result",
-        lazy="selectin"
-    )
-
-    generated_by_user: Mapped["User"] = relationship(
-        lazy="selectin"
-    )
+    messages: Mapped[list["Message"]] = relationship(back_populates="analysis_result", lazy="selectin")
+    generated_by_user: Mapped["User"] = relationship(lazy="selectin")
