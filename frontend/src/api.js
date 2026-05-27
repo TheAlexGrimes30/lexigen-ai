@@ -136,7 +136,7 @@ export async function becomeAdmin(token) {
 
 export async function fetchAdminAnalytics(token) {
   const response = await fetchWithRetry(
-    `${API_BASE}/api/auth/admin/analytics`,
+    `${API_BASE}/api/admin/analytics`,
     {
       headers: authHeaders(token),
     }
@@ -145,6 +145,50 @@ export async function fetchAdminAnalytics(token) {
   return parseOrThrow(
     response,
     "Не удалось загрузить аналитику"
+  );
+}
+
+export async function fetchSubscriptionPlans(token) {
+  const response = await fetchWithRetry(
+    `${API_BASE}/api/subscriptions/plans`,
+    {
+      headers: authHeaders(token),
+    }
+  );
+
+  return parseOrThrow(
+    response,
+    "Не удалось загрузить тарифы"
+  );
+}
+
+export async function fetchCurrentSubscription(token) {
+  const response = await fetchWithRetry(
+    `${API_BASE}/api/subscriptions/me`,
+    {
+      headers: authHeaders(token),
+    }
+  );
+
+  return parseOrThrow(
+    response,
+    "Не удалось загрузить подписку"
+  );
+}
+
+export async function updateSubscription(plan, token) {
+  const response = await fetchWithRetry(
+    `${API_BASE}/api/subscriptions/me`,
+    {
+      method: "PUT",
+      headers: authHeaders(token),
+      body: JSON.stringify({ plan }),
+    }
+  );
+
+  return parseOrThrow(
+    response,
+    "Не удалось изменить подписку"
   );
 }
 
@@ -190,6 +234,22 @@ export async function deleteChat(chatId, token) {
   return parseOrThrow(
     response,
     "Не удалось удалить чат"
+  );
+}
+
+export async function updateChat(chatId, title, token) {
+  const response = await fetchWithRetry(
+    `${API_BASE}/api/chats/${chatId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ title }),
+    }
+  );
+
+  return parseOrThrow(
+    response,
+    "Не удалось изменить название чата"
   );
 }
 
@@ -265,3 +325,4 @@ export async function downloadAnalysisResult(
 
   window.URL.revokeObjectURL(url);
 }
+

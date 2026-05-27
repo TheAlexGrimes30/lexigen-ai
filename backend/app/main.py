@@ -12,6 +12,8 @@ from backend.modules.messages.router import router as messages_router
 from backend.modules.rag.router import router as rag_router
 from backend.modules.rag.service import rag_app_service
 from backend.modules.analytics.router import router as analysis_results_router
+from backend.modules.admin.router import router as admin_router
+from backend.modules.subscriptions.router import router as subscriptions_router
 
 
 @asynccontextmanager
@@ -39,6 +41,8 @@ app.include_router(chats_router)
 app.include_router(messages_router)
 app.include_router(rag_router)
 app.include_router(analysis_results_router)
+app.include_router(admin_router)
+app.include_router(subscriptions_router)
 
 
 @app.get("/")

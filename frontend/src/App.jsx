@@ -3,12 +3,17 @@ import {
   createChat,
   deleteChat,
   downloadAnalysisResult,
+  fetchAdminAnalytics,
   fetchChats,
+  fetchCurrentSubscription,
   fetchMe,
   fetchMessages,
+  fetchSubscriptionPlans,
   login,
   register,
   sendMessage,
+  updateChat,
+  updateSubscription,
 } from "./api";
 
 const TOKEN_KEY = "lexigen_token";
@@ -32,6 +37,11 @@ export default function App() {
     localStorage.getItem(TOKEN_KEY) || ""
   );
   const [currentUser, setCurrentUser] = useState(null);
+  const [currentSubscription, setCurrentSubscription] = useState(null);
+  const [subscriptionPlans, setSubscriptionPlans] = useState([]);
+  const [isSubscriptionUpdating, setIsSubscriptionUpdating] = useState(false);
+  const [adminAnalytics, setAdminAnalytics] = useState(null);
+  const [isAdminAnalyticsLoading, setIsAdminAnalyticsLoading] = useState(false);
 
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
@@ -41,6 +51,9 @@ export default function App() {
 
   const [chats, setChats] = useState([]);
   const [selectedChatId, setSelectedChatId] = useState(null);
+  const [editingChatId, setEditingChatId] = useState(null);
+  const [editingChatTitle, setEditingChatTitle] = useState("");
+
   const [messages, setMessages] = useState([]);
   const [newChatTitle, setNewChatTitle] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -78,6 +91,9 @@ export default function App() {
   useEffect(() => {
     if (!authToken) {
       setCurrentUser(null);
+      setCurrentSubscription(null);
+      setSubscriptionPlans([]);
+      setAdminAnalytics(null);
       setChats([]);
       setMessages([]);
       setSelectedChatId(null);
@@ -101,7 +117,13 @@ export default function App() {
 
       setCurrentUser(user);
 
-      await loadChats(authToken);
+      await Promise.all([
+        loadChats(authToken),
+        loadSubscriptionData(authToken),
+        user.role === "admin"
+          ? loadAdminAnalytics(authToken)
+          : Promise.resolve(),
+      ]);
     } catch (e) {
       clearSession();
       setError(e.message || "Сессия истекла. Войдите заново.");
@@ -112,6 +134,9 @@ export default function App() {
     localStorage.removeItem(TOKEN_KEY);
     setAuthToken("");
     setCurrentUser(null);
+    setCurrentSubscription(null);
+    setSubscriptionPlans([]);
+    setAdminAnalytics(null);
     setChats([]);
     setMessages([]);
     setSelectedChatId(null);
@@ -191,6 +216,100 @@ export default function App() {
       }
     } catch (e) {
       setError(e.message || "Ошибка загрузки чатов");
+    }
+  }
+
+  function startEditChat(chat) {
+      setEditingChatId(chat.id);
+      setEditingChatTitle(chat.title);
+  }
+
+  function cancelEditChat() {
+      setEditingChatId(null);
+      setEditingChatTitle("");
+  }
+
+async function saveChatTitle(chatId) {
+  const title = editingChatTitle.trim();
+
+  if (!title || !authToken) {
+    return;
+  }
+
+  try {
+    setError("");
+
+    const updatedChat = await updateChat(
+      chatId,
+      title,
+      authToken,
+    );
+
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === chatId ? updatedChat : chat
+      )
+    );
+
+    cancelEditChat();
+  } catch (e) {
+    setError(e.message || "Ошибка изменения названия чата");
+  }
+}
+
+  async function loadSubscriptionData(token = authToken) {
+    if (!token) return;
+
+    try {
+      const [plans, subscription] = await Promise.all([
+        fetchSubscriptionPlans(token),
+        fetchCurrentSubscription(token),
+      ]);
+
+      setSubscriptionPlans(plans);
+      setCurrentSubscription(subscription);
+    } catch (e) {
+      setError(e.message || "Ошибка загрузки подписки");
+    }
+  }
+
+  async function onSelectSubscription(plan) {
+    if (!authToken || isSubscriptionUpdating) return;
+
+    try {
+      setError("");
+      setIsSubscriptionUpdating(true);
+
+      const subscription = await updateSubscription(
+        plan,
+        authToken
+      );
+
+      setCurrentSubscription(subscription);
+
+      if (currentUser?.role === "admin") {
+        await loadAdminAnalytics(authToken);
+      }
+    } catch (e) {
+      setError(e.message || "Ошибка изменения подписки");
+    } finally {
+      setIsSubscriptionUpdating(false);
+    }
+  }
+
+  async function loadAdminAnalytics(token = authToken) {
+    if (!token) return;
+
+    try {
+      setIsAdminAnalyticsLoading(true);
+
+      const analytics = await fetchAdminAnalytics(token);
+
+      setAdminAnalytics(analytics);
+    } catch (e) {
+      setError(e.message || "Ошибка загрузки аналитики");
+    } finally {
+      setIsAdminAnalyticsLoading(false);
     }
   }
 
@@ -481,26 +600,128 @@ export default function App() {
         )}
 
         {currentUser && activeTab === "home" && (
-          <section className="card hero">
-            <h1>Система анализа кредитных договоров</h1>
-            <p>
-              LexigenAI помогает юристам и клиентам анализировать условия кредитных договоров,
-              выявлять риски, спорные пункты и формировать рекомендации.
-            </p>
-            <ul>
-              <li>Разбор условий договора и юридических рисков</li>
-              <li>Диалоговый помощник по вопросам кредитного права</li>
-              <li>История чатов и быстрый доступ к предыдущим обсуждениям</li>
-            </ul>
+          <section className="home-page">
+            <div className="card hero hero-modern">
+              <div className="hero-content">
+                <span className="hero-badge">LexigenAI · Credit Law Assistant</span>
+                <h1>Анализ кредитных договоров с RAG по базе знаний</h1>
+                <p>
+                  Загружайте DOCX/PDF договоры, получайте юридический анализ рисков,
+                  слабых условий и рекомендаций, а затем скачивайте результат в DOCX.
+                </p>
+
+                <div className="hero-actions">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("chats")}
+                  >
+                    Начать анализ
+                  </button>
+
+                  <button
+                    type="button"
+                    className="secondary-action"
+                    onClick={() => setActiveTab("profile")}
+                  >
+                    Посмотреть подписку
+                  </button>
+                </div>
+              </div>
+
+              <div className="hero-panel">
+                <div className="hero-panel-item">
+                  <strong>RAG</strong>
+                  <span>по нормам кредитного права</span>
+                </div>
+                <div className="hero-panel-item">
+                  <strong>DOCX/PDF</strong>
+                  <span>загрузка документов в чат</span>
+                </div>
+                <div className="hero-panel-item">
+                  <strong>DOCX</strong>
+                  <span>скачивание результата анализа</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="home-features">
+              <div className="card feature-card">
+                <div className="feature-icon">⚖️</div>
+                <h3>Юридические риски</h3>
+                <p>Ассистент выделяет спорные условия, пробелы договора и потенциальные риски.</p>
+              </div>
+
+              <div className="card feature-card">
+                <div className="feature-icon">📄</div>
+                <h3>Документы в чате</h3>
+                <p>Пользователь может прикрепить договор, а система автоматически отправит текст в RAG-анализ.</p>
+              </div>
+
+              <div className="card feature-card">
+                <div className="feature-icon">💼</div>
+                <h3>Подписки</h3>
+                <p>Basic, Pro и Enterprise снимают ограничение на количество анализируемых документов.</p>
+              </div>
+            </div>
           </section>
         )}
 
         {currentUser && activeTab === "profile" && (
           <section className="card stub">
             <h2>Личный кабинет</h2>
-            <p>Имя: {currentUser.name}</p>
-            <p>Email: {currentUser.email}</p>
-            <p>Роль: {currentUser.role}</p>
+
+            <div className="profile-info">
+              <p>Имя: {currentUser.name}</p>
+              <p>Email: {currentUser.email}</p>
+              <p>Роль: {currentUser.role}</p>
+              <p>
+                Текущая подписка:{" "}
+                <strong>
+                  {currentSubscription?.title || "Без подписки"}
+                </strong>
+              </p>
+            </div>
+
+            <div className="subscription-section">
+              <h3>Подписки</h3>
+              <p className="subscription-note">
+                Без подписки пользователь может загрузить документ только один раз.
+                Пользователи с подпиской могут анализировать документы без лимита.
+                Администратор может анализировать документы без подписки.
+              </p>
+
+              <div className="subscription-grid">
+                {subscriptionPlans.map((plan) => (
+                  <div
+                    key={plan.plan}
+                    className={`subscription-card ${
+                      currentSubscription?.plan === plan.plan
+                        ? "active"
+                        : ""
+                    }`}
+                  >
+                    <h4>{plan.title}</h4>
+                    <div className="subscription-price">
+                      {plan.price_rub.toLocaleString("ru-RU")} ₽
+                    </div>
+                    <p>{plan.description}</p>
+
+                    <button
+                      type="button"
+                      disabled={
+                        isSubscriptionUpdating ||
+                        currentSubscription?.plan === plan.plan
+                      }
+                      onClick={() => onSelectSubscription(plan.plan)}
+                    >
+                      {currentSubscription?.plan === plan.plan
+                        ? "Активна"
+                        : "Выбрать"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <button
               type="button"
@@ -514,8 +735,44 @@ export default function App() {
 
         {currentUser && currentUser.role === "admin" && activeTab === "analytics" && (
           <section className="card stub">
-            <h2>Аналитика</h2>
-            <p>Раздел доступен только администратору.</p>
+            <div className="admin-analytics-header">
+              <h2>Аналитика</h2>
+
+              <button
+                type="button"
+                onClick={() => loadAdminAnalytics(authToken)}
+                disabled={isAdminAnalyticsLoading}
+              >
+                {isAdminAnalyticsLoading ? "Обновление..." : "Обновить"}
+              </button>
+            </div>
+
+            <div className="analytics-grid">
+              <div className="analytics-card">
+                <span>Всего пользователей</span>
+                <strong>{adminAnalytics?.total_users ?? 0}</strong>
+              </div>
+
+              <div className="analytics-card">
+                <span>Без подписки</span>
+                <strong>{adminAnalytics?.without_subscription ?? 0}</strong>
+              </div>
+
+              <div className="analytics-card">
+                <span>Basic</span>
+                <strong>{adminAnalytics?.by_plan?.basic ?? 0}</strong>
+              </div>
+
+              <div className="analytics-card">
+                <span>Pro</span>
+                <strong>{adminAnalytics?.by_plan?.pro ?? 0}</strong>
+              </div>
+
+              <div className="analytics-card">
+                <span>Enterprise</span>
+                <strong>{adminAnalytics?.by_plan?.enterprise ?? 0}</strong>
+              </div>
+            </div>
           </section>
         )}
 
@@ -540,25 +797,86 @@ export default function App() {
                       key={chat.id}
                       className={`chat-item-row ${chat.id === selectedChatId ? "active" : ""}`}
                     >
-                      <button
-                        className={`chat-item ${chat.id === selectedChatId ? "active" : ""}`}
-                        onClick={() => setSelectedChatId(chat.id)}
-                      >
-                        {chat.title}
-                      </button>
+                      {editingChatId === chat.id ? (
+                        <form
+                          className="chat-edit-form"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            saveChatTitle(chat.id);
+                          }}
+                        >
+                          <input
+                            value={editingChatTitle}
+                            onChange={(e) =>
+                              setEditingChatTitle(e.target.value)
+                            }
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                cancelEditChat();
+                              }
+                            }}
+                          />
 
-                      <button
-                        type="button"
-                        className="chat-item-delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteChat(chat.id);
-                        }}
-                        title="Удалить чат"
-                        aria-label="Удалить чат"
-                      >
-                        🗑
-                      </button>
+                          <button
+                            type="submit"
+                            className="chat-edit-save"
+                            title="Сохранить"
+                          >
+                            ✓
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-edit-cancel"
+                            onClick={cancelEditChat}
+                            title="Отменить"
+                          >
+                            ×
+                          </button>
+                        </form>
+                      ) : (
+                        <>
+                          <button
+                            className={`chat-item ${
+                              chat.id === selectedChatId
+                                ? "active"
+                                : ""
+                            }`}
+                            onClick={() =>
+                              setSelectedChatId(chat.id)
+                            }
+                          >
+                            {chat.title}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-item-edit"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startEditChat(chat);
+                            }}
+                            title="Редактировать чат"
+                            aria-label="Редактировать чат"
+                          >
+                            ✏️
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-item-delete"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteChat(chat.id);
+                            }}
+                            title="Удалить чат"
+                            aria-label="Удалить чат"
+                          >
+                            🗑
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
