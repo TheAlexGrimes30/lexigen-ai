@@ -17,7 +17,7 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Возвращает текущего пользователя по JWT-токену."""
-    
+
     if not credentials or not credentials.credentials:
         raise HTTPException(
             status_code=401,
