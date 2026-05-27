@@ -5,7 +5,7 @@ from qdrant_client.http.models import Distance
 
 from backend.modules.rag.chuncking import HybridLegalChunker
 from backend.modules.rag.dense_retriever_service import Retriever
-from backend.modules.rag.generator import ContextCleaner, LaborPromptBuilder, QwenClient, Generator
+from backend.modules.rag.generator import ContextCleaner, CreditPromptBuilder, QwenClient, Generator
 from backend.modules.rag.index_service import IndexService
 from backend.modules.rag.ingestion_service import MarkdownDocumentLoader, IngestionPipeline, IngestionService
 from backend.modules.rag.rag_embedder import Embedder
@@ -27,7 +27,7 @@ class RAG:
     - answer generation
     """
 
-    def __init__(self) -> None:
+    def __init__(self, n_ctx: int = 2048) -> None:
         """
         Initialize all RAG components.
 
@@ -99,9 +99,9 @@ class RAG:
             top_n=5
         )
 
-        self.llm = QwenClient(model_path=str(model_path))
+        self.llm = QwenClient(model_path=str(model_path), n_ctx=n_ctx)
 
-        self.prompt_builder = LaborPromptBuilder()
+        self.prompt_builder = CreditPromptBuilder()
 
         self.cleaner = ContextCleaner()
 

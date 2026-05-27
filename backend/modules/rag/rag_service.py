@@ -15,7 +15,7 @@ class RAGService:
             retriever,
             reranker,
             generator,
-            max_context_chars: int = 3500,
+            max_context_chars: int = 1200,
             min_final_score: float = 0.50
     ):
         self.retriever = retriever
@@ -25,17 +25,46 @@ class RAGService:
         self.max_context_chars = max_context_chars
         self.min_final_score = min_final_score
 
-    def ask(self, query: str) -> RAGResponse:
+    def ask(
+            self,
+            query: str,
+            mode: RAGMode = RAGMode.USER_QUERY,
+    ) -> RAGResponse:
 
-        hits = self.retriever.retrieve(query=query, top_k=25)
-        reranked = self.reranker.rerank(query=query, hits=hits, top_n=10)
+        if mode == RAGMode.USER_QUERY:
+            top_k = 25
+            top_n = 10
+            max_context_chars = 3500
+            use_reranker = True
+            max_tokens = 512
+        else:
+            top_k = 8
+            top_n = 4
+            max_context_chars = 1200
+            use_reranker = False
+            max_tokens = 400
+
+        hits = self.retriever.retrieve(
+            query=query,
+            top_k=top_k
+        )
+
+        reranked = (
+            self.reranker.rerank(
+                query=query,
+                hits=hits,
+                top_n=top_n,
+            )
+            if use_reranker
+            else hits[:top_n]
+        )
 
         filtered = self._filter_hits(reranked)
 
         if not filtered:
-            filtered = reranked[:5]
+            filtered = reranked[:top_n]
 
-        context = self._build_context(filtered)
+        context = self._build_context(hits=filtered)
 
         if len(context.strip()) < 80:
             context = self._fallback_context(reranked[:5])
