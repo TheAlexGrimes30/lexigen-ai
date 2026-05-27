@@ -2,6 +2,8 @@ from io import BytesIO
 
 from docx import Document
 
+from backend.modules.analytics.interfaces import BaseAnalysisReportBuilder
+
 
 class DocxAnalysisReportBuilder(BaseAnalysisReportBuilder):
     """Генератор DOCX-отчёта результата анализа."""
