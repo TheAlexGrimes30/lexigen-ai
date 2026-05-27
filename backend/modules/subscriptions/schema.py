@@ -20,9 +20,3 @@ class SubscriptionResponse(BaseModel):
     price_rub: int
     is_active: bool
     can_analyze_unlimited: bool
-
-
-class SubscriptionAnalyticsResponse(BaseModel):
-    total_users: int
-    without_subscription: int
-    by_plan: dict[str, int]

@@ -1,12 +1,12 @@
-from sqlalchemy import select, func
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db import SubscriptionPlan, Subscription, User, UserRole
+from backend.db import Subscription, SubscriptionPlan, User, UserRole
 from backend.modules.subscriptions.constants import SUBSCRIPTION_PLANS
 
 
 class SubscriptionsService:
-    """Сервис подписок и аналитики по подпискам."""
+    """Сервис подписок пользователя."""
 
     def list_plans(self) -> list[dict]:
         return [
@@ -66,22 +66,25 @@ class SubscriptionsService:
         user: User,
         plan: SubscriptionPlan,
     ) -> dict:
-        subscription = await self.get_user_subscription(
-            db,
-            user.id,
+        """
+        Меняет подписку пользователя.
+
+        Старые подписки физически удаляются, затем создаётся новая активная.
+        """
+
+        await db.execute(
+            delete(Subscription).where(
+                Subscription.user_id == user.id,
+            )
         )
 
-        if subscription is None:
-            subscription = Subscription(
-                user_id=user.id,
-                plan_name=plan,
-                is_active=True,
-            )
+        subscription = Subscription(
+            user_id=user.id,
+            plan_name=plan,
+            is_active=True,
+        )
 
-            db.add(subscription)
-        else:
-            subscription.plan_name = plan
-            subscription.is_active = True
+        db.add(subscription)
 
         await db.commit()
 
@@ -101,49 +104,6 @@ class SubscriptionsService:
         )
 
         return subscription is not None
-
-    async def get_admin_analytics(
-        self,
-        db: AsyncSession,
-    ) -> dict:
-        total_users = await db.scalar(
-            select(func.count(User.id))
-        )
-
-        by_plan = {
-            SubscriptionPlan.basic.value: 0,
-            SubscriptionPlan.pro.value: 0,
-            SubscriptionPlan.enterprise.value: 0,
-        }
-
-        stmt = (
-            select(
-                Subscription.plan_name,
-                func.count(Subscription.id),
-            )
-            .where(Subscription.is_active.is_(True))
-            .group_by(Subscription.plan_name)
-        )
-
-        result = await db.execute(stmt)
-
-        users_with_subscription = 0
-
-        for plan, count in result.all():
-            count = int(count)
-            users_with_subscription += count
-            by_plan[plan.value] = count
-
-        total_users = int(total_users or 0)
-
-        return {
-            "total_users": total_users,
-            "without_subscription": max(
-                total_users - users_with_subscription,
-                0,
-            ),
-            "by_plan": by_plan,
-        }
 
 
 subscriptions_service = SubscriptionsService()
