@@ -12,6 +12,7 @@ from backend.db.users import User
 from backend.modules.chats.service import chats_service
 from backend.modules.messages.schema import MessageResponse
 from backend.modules.rag.service import rag_app_service
+from backend.modules.subscriptions.service import subscriptions_service
 from backend.parsers.document_parser import ContractDocumentParser
 
 
