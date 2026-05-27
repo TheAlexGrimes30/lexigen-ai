@@ -3,13 +3,17 @@ import {
   createChat,
   deleteChat,
   downloadAnalysisResult,
+  fetchAdminAnalytics,
   fetchChats,
-  updateChat,
+  fetchCurrentSubscription,
   fetchMe,
   fetchMessages,
+  fetchSubscriptionPlans,
   login,
   register,
   sendMessage,
+  updateChat,
+  updateSubscription,
 } from "./api";
 
 const TOKEN_KEY = "lexigen_token";
@@ -33,6 +37,11 @@ export default function App() {
     localStorage.getItem(TOKEN_KEY) || ""
   );
   const [currentUser, setCurrentUser] = useState(null);
+  const [currentSubscription, setCurrentSubscription] = useState(null);
+  const [subscriptionPlans, setSubscriptionPlans] = useState([]);
+  const [isSubscriptionUpdating, setIsSubscriptionUpdating] = useState(false);
+  const [adminAnalytics, setAdminAnalytics] = useState(null);
+  const [isAdminAnalyticsLoading, setIsAdminAnalyticsLoading] = useState(false);
 
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
@@ -82,6 +91,9 @@ export default function App() {
   useEffect(() => {
     if (!authToken) {
       setCurrentUser(null);
+      setCurrentSubscription(null);
+      setSubscriptionPlans([]);
+      setAdminAnalytics(null);
       setChats([]);
       setMessages([]);
       setSelectedChatId(null);
@@ -105,7 +117,13 @@ export default function App() {
 
       setCurrentUser(user);
 
-      await loadChats(authToken);
+      await Promise.all([
+        loadChats(authToken),
+        loadSubscriptionData(authToken),
+        user.role === "admin"
+          ? loadAdminAnalytics(authToken)
+          : Promise.resolve(),
+      ]);
     } catch (e) {
       clearSession();
       setError(e.message || "Сессия истекла. Войдите заново.");
@@ -116,6 +134,9 @@ export default function App() {
     localStorage.removeItem(TOKEN_KEY);
     setAuthToken("");
     setCurrentUser(null);
+    setCurrentSubscription(null);
+    setSubscriptionPlans([]);
+    setAdminAnalytics(null);
     setChats([]);
     setMessages([]);
     setSelectedChatId(null);
@@ -235,6 +256,62 @@ async function saveChatTitle(chatId) {
     setError(e.message || "Ошибка изменения названия чата");
   }
 }
+
+  async function loadSubscriptionData(token = authToken) {
+    if (!token) return;
+
+    try {
+      const [plans, subscription] = await Promise.all([
+        fetchSubscriptionPlans(token),
+        fetchCurrentSubscription(token),
+      ]);
+
+      setSubscriptionPlans(plans);
+      setCurrentSubscription(subscription);
+    } catch (e) {
+      setError(e.message || "Ошибка загрузки подписки");
+    }
+  }
+
+  async function onSelectSubscription(plan) {
+    if (!authToken || isSubscriptionUpdating) return;
+
+    try {
+      setError("");
+      setIsSubscriptionUpdating(true);
+
+      const subscription = await updateSubscription(
+        plan,
+        authToken
+      );
+
+      setCurrentSubscription(subscription);
+
+      if (currentUser?.role === "admin") {
+        await loadAdminAnalytics(authToken);
+      }
+    } catch (e) {
+      setError(e.message || "Ошибка изменения подписки");
+    } finally {
+      setIsSubscriptionUpdating(false);
+    }
+  }
+
+  async function loadAdminAnalytics(token = authToken) {
+    if (!token) return;
+
+    try {
+      setIsAdminAnalyticsLoading(true);
+
+      const analytics = await fetchAdminAnalytics(token);
+
+      setAdminAnalytics(analytics);
+    } catch (e) {
+      setError(e.message || "Ошибка загрузки аналитики");
+    } finally {
+      setIsAdminAnalyticsLoading(false);
+    }
+  }
 
   async function loadMessages(chatId, token = authToken) {
     if (!token) return;
@@ -540,9 +617,59 @@ async function saveChatTitle(chatId) {
         {currentUser && activeTab === "profile" && (
           <section className="card stub">
             <h2>Личный кабинет</h2>
-            <p>Имя: {currentUser.name}</p>
-            <p>Email: {currentUser.email}</p>
-            <p>Роль: {currentUser.role}</p>
+
+            <div className="profile-info">
+              <p>Имя: {currentUser.name}</p>
+              <p>Email: {currentUser.email}</p>
+              <p>Роль: {currentUser.role}</p>
+              <p>
+                Текущая подписка:{" "}
+                <strong>
+                  {currentSubscription?.plan || "Без подписки"}
+                </strong>
+              </p>
+            </div>
+
+            <div className="subscription-section">
+              <h3>Подписки</h3>
+              <p className="subscription-note">
+                Без подписки пользователь может загрузить документ только один раз.
+                Пользователи с подпиской могут анализировать документы без лимита.
+                Администратор может анализировать документы без подписки.
+              </p>
+
+              <div className="subscription-grid">
+                {subscriptionPlans.map((plan) => (
+                  <div
+                    key={plan.plan}
+                    className={`subscription-card ${
+                      currentSubscription?.plan === plan.plan
+                        ? "active"
+                        : ""
+                    }`}
+                  >
+                    <h4>{plan.title}</h4>
+                    <div className="subscription-price">
+                      {plan.price_rub.toLocaleString("ru-RU")} ₽
+                    </div>
+                    <p>{plan.description}</p>
+
+                    <button
+                      type="button"
+                      disabled={
+                        isSubscriptionUpdating ||
+                        currentSubscription?.plan === plan.plan
+                      }
+                      onClick={() => onSelectSubscription(plan.plan)}
+                    >
+                      {currentSubscription?.plan === plan.plan
+                        ? "Активна"
+                        : "Выбрать"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
 
             <button
               type="button"
@@ -556,8 +683,44 @@ async function saveChatTitle(chatId) {
 
         {currentUser && currentUser.role === "admin" && activeTab === "analytics" && (
           <section className="card stub">
-            <h2>Аналитика</h2>
-            <p>Раздел доступен только администратору.</p>
+            <div className="admin-analytics-header">
+              <h2>Аналитика</h2>
+
+              <button
+                type="button"
+                onClick={() => loadAdminAnalytics(authToken)}
+                disabled={isAdminAnalyticsLoading}
+              >
+                {isAdminAnalyticsLoading ? "Обновление..." : "Обновить"}
+              </button>
+            </div>
+
+            <div className="analytics-grid">
+              <div className="analytics-card">
+                <span>Всего пользователей</span>
+                <strong>{adminAnalytics?.total_users ?? 0}</strong>
+              </div>
+
+              <div className="analytics-card">
+                <span>Без подписки</span>
+                <strong>{adminAnalytics?.without_subscription ?? 0}</strong>
+              </div>
+
+              <div className="analytics-card">
+                <span>Basic</span>
+                <strong>{adminAnalytics?.by_plan?.basic ?? 0}</strong>
+              </div>
+
+              <div className="analytics-card">
+                <span>Pro</span>
+                <strong>{adminAnalytics?.by_plan?.pro ?? 0}</strong>
+              </div>
+
+              <div className="analytics-card">
+                <span>Enterprise</span>
+                <strong>{adminAnalytics?.by_plan?.enterprise ?? 0}</strong>
+              </div>
+            </div>
           </section>
         )}
 

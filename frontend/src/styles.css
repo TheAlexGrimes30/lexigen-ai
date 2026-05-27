@@ -519,3 +519,99 @@ button:disabled {
   border-color: rgba(255, 110, 110, 0.55);
   background: linear-gradient(135deg, #5a1d2b 0%, #9c3046 60%, #d5465d 100%);
 }
+
+.profile-info {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.profile-info p {
+  margin: 0;
+}
+
+.subscription-section {
+  margin-top: 22px;
+}
+
+.subscription-section h3 {
+  margin-bottom: 8px;
+}
+
+.subscription-note {
+  margin-top: 0;
+  color: var(--text-secondary);
+}
+
+.subscription-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.subscription-card {
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--chat-item-bg);
+}
+
+.subscription-card.active {
+  border-color: rgba(71, 204, 255, 0.85);
+  box-shadow: 0 0 18px rgba(71, 204, 255, 0.18);
+}
+
+.subscription-card h4 {
+  margin: 0 0 8px;
+}
+
+.subscription-card p {
+  min-height: 42px;
+  margin: 10px 0 14px;
+}
+
+.subscription-price {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.admin-analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.analytics-card {
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  padding: 16px;
+  background: var(--chat-item-bg);
+}
+
+.analytics-card span {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.analytics-card strong {
+  font-size: 28px;
+}
+
+@media (max-width: 980px) {
+  .subscription-grid,
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+}
