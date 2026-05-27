@@ -6,7 +6,6 @@ from backend.modules.rag.rag_engine import RAG
 
 
 class RAGStatus(str, Enum):
-
     NOT_STARTED = "not_started"
     LOADING = "loading"
     READY = "ready"
@@ -35,6 +34,7 @@ class RAGApplicationService:
 
         self._status = RAGStatus.LOADING
         self._error = None
+
         asyncio.create_task(self._load())
 
     async def _load(self) -> None:
@@ -42,20 +42,53 @@ class RAGApplicationService:
             try:
                 rag = await asyncio.to_thread(RAG)
                 await asyncio.to_thread(rag.build_and_index)
+
                 self._rag = rag
                 self._status = RAGStatus.READY
                 self._error = None
+
             except Exception as exc:
                 self._rag = None
                 self._status = RAGStatus.ERROR
                 self._error = str(exc)
+
                 print(f"[RAG STARTUP ERROR] {exc}")
 
     async def ask(self, query: str) -> str:
         query = (query or "").strip()
+
         if not query:
             return "Пустой запрос. Напишите вопрос, чтобы я смог найти ответ."
 
+        self._ensure_ready()
+
+        try:
+            return await asyncio.to_thread(
+                self._rag.ask,
+                query,
+            )
+        except Exception as exc:
+            print(f"[RAG ASK ERROR] {exc}")
+            raise RuntimeError(f"Ошибка при генерации RAG-ответа: {exc}") from exc
+
+    async def analyze_contract(self, contract_text: str) -> str:
+        contract_text = (contract_text or "").strip()
+
+        if not contract_text:
+            return "Не удалось извлечь текст из документа."
+
+        self._ensure_ready()
+
+        try:
+            return await asyncio.to_thread(
+                self._rag.analyze_contract,
+                contract_text,
+            )
+        except Exception as exc:
+            print(f"[RAG DOCUMENT ANALYSIS ERROR] {exc}")
+            raise RuntimeError(f"Ошибка при анализе документа: {exc}") from exc
+
+    def _ensure_ready(self) -> None:
         if self._status == RAGStatus.LOADING:
             raise RuntimeError("RAG ещё загружается. Попробуйте отправить вопрос чуть позже.")
 
@@ -64,12 +97,6 @@ class RAGApplicationService:
 
         if self._rag is None:
             raise RuntimeError("RAG ещё не инициализирован.")
-
-        try:
-            return await asyncio.to_thread(self._rag.ask, query)
-        except Exception as exc:
-            print(f"[RAG ASK ERROR] {exc}")
-            raise RuntimeError(f"Ошибка при генерации RAG-ответа: {exc}") from exc
 
     def health(self) -> dict:
         return {

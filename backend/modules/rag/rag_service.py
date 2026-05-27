@@ -17,13 +17,11 @@ class RAGService:
         retriever,
         reranker,
         generator,
-        max_context_chars: int = 1200,
         min_final_score: float = 0.50,
     ):
         self.retriever = retriever
         self.reranker = reranker
         self.generator = generator
-        self.max_context_chars = max_context_chars
         self.min_final_score = min_final_score
 
     def ask(
@@ -70,8 +68,7 @@ class RAGService:
             raw_answer = self.generator.generate(
                 query=query,
                 context=context,
-                hits=filtered,
-                max_tokens=settings["max_tokens"],
+                hits=filtered
             )
         finally:
             self.generator.prompt_builder = old_prompt_builder
@@ -95,7 +92,6 @@ class RAGService:
                 "top_n": 10,
                 "max_context_chars": 3500,
                 "use_reranker": False,
-                "max_tokens": 512,
                 "prompt_builder": CreditPromptBuilder(),
             }
 
@@ -104,7 +100,6 @@ class RAGService:
             "top_n": 4,
             "max_context_chars": 1200,
             "use_reranker": False,
-            "max_tokens": 400,
             "prompt_builder": ContractRiskAnalysisPromptBuilder(),
         }
 

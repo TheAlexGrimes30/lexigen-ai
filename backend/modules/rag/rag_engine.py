@@ -9,7 +9,7 @@ from backend.modules.rag.generator import ContextCleaner, CreditPromptBuilder, Q
 from backend.modules.rag.index_service import IndexService
 from backend.modules.rag.ingestion_service import MarkdownDocumentLoader, IngestionPipeline, IngestionService
 from backend.modules.rag.rag_embedder import Embedder
-from backend.modules.rag.rag_service import RAGService
+from backend.modules.rag.rag_service import RAGService, RAGMode
 from backend.modules.rag.reranker_service import Reranker
 from backend.modules.rag.search_result_service import SearchResult
 from backend.modules.rag.storage import VectorStore
@@ -27,97 +27,76 @@ class RAG:
     - answer generation
     """
 
-    def __init__(self, n_ctx: int = 2048) -> None:
-        """
-        Initialize all RAG components.
-
-        Returns:
-            None
-        """
-
+    def __init__(self, n_ctx: int = 2048, max_tokens: int = 400) -> None:
         base_path = Path(__file__).resolve()
         project_root = base_path.parents[3]
-        model_path = project_root / "models" / "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
 
+        model_path = project_root / "models" / "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
         rag_db_path = project_root / "rag_db"
 
-        self.debug_path = project_root / "debug"
-
-
-
-        loader = MarkdownDocumentLoader(
-            str(rag_db_path)
-        )
-
-        parser = HybridLegalChunker()
+        loader = MarkdownDocumentLoader(str(rag_db_path))
+        chunker = HybridLegalChunker()
 
         pipeline = IngestionPipeline(
             loader=loader,
-            chunker=parser
+            chunker=chunker,
         )
 
-        self.ingestion = IngestionService(
-            pipeline
-        )
-
+        self.ingestion = IngestionService(pipeline)
 
         self.embedder = Embedder(
             model_name=str(project_root / "models" / "Qwen3-Embedding-0.6B"),
-            normalize=True
+            normalize=True,
         )
-
 
         self.qdrant = QdrantClient(
             "localhost",
-            port=6333
+            port=6333,
         )
 
         self.vector_store = VectorStore(
             client=self.qdrant,
             collection_name="credit_collection",
             vector_size=self.embedder.dim,
-            distance=Distance.COSINE
+            distance=Distance.COSINE,
         )
 
         self.vector_store.ensure_collection()
 
-
         self.index_service = IndexService(
             vector_store=self.vector_store,
-            embedder=self.embedder
+            embedder=self.embedder,
         )
 
         self.retriever = Retriever(
             vector_store=self.vector_store,
             embedder=self.embedder,
-            max_pool_size=50
+            max_pool_size=50,
         )
-
 
         self.reranker = Reranker(
-            model_name="BAAI/bge-reranker-v2-m3",
-            top_n=5
+            model_name=str(project_root / "models" / "bge-reranker-v2-m3"),
+            top_n=5,
         )
 
-        self.llm = QwenClient(model_path=str(model_path), n_ctx=n_ctx)
-
-        self.prompt_builder = CreditPromptBuilder()
-
-        self.cleaner = ContextCleaner()
+        self.llm = QwenClient(
+            model_path=str(model_path),
+            n_ctx=n_ctx,
+        )
 
         self.generator = Generator(
             llm=self.llm,
-            prompt_builder=self.prompt_builder,
-            cleaner=self.cleaner
+            prompt_builder=CreditPromptBuilder(),
+            cleaner=ContextCleaner(),
         )
 
         self.rag_service = RAGService(
             retriever=self.retriever,
             reranker=self.reranker,
             generator=self.generator,
-            max_context_chars=3500,
-            min_final_score=0.50
+            min_final_score=0.50,
         )
+
 
     def build_and_index(self) -> list:
         """
@@ -222,24 +201,18 @@ class RAG:
             top_n=rerank_top_n
         )
 
-    def ask(
-        self,
-        query: str
-    ) -> str:
-        """
-        Generate final answer using full RAG pipeline.
-
-        Args:
-            query (str):
-                User query.
-
-        Returns:
-            str:
-                Final generated answer.
-        """
-
+    def ask(self, query: str) -> str:
         response = self.rag_service.ask(
-            query=query
+            query=query,
+            mode=RAGMode.USER_QUERY,
+        )
+
+        return response.answer
+
+    def analyze_contract(self, contract_text: str) -> str:
+        response = self.rag_service.ask(
+            query=contract_text,
+            mode=RAGMode.DOCUMENT_ANALYSIS,
         )
 
         return response.answer

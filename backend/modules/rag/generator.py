@@ -51,7 +51,8 @@ class ContextCleaner(BaseContextCleaner):
 
 class QwenClient(BaseLLMClient):
 
-    def __init__(self, model_path: str, n_ctx: int = 2048):
+    def __init__(self, model_path: str, n_ctx: int = 2048, max_tokens: int = 400):
+        self.max_tokens = max_tokens
         self.llm = Llama(
             model_path=str(model_path),
             n_ctx=n_ctx,
@@ -59,7 +60,7 @@ class QwenClient(BaseLLMClient):
             verbose=False
         )
 
-    def generate(self, prompt: str, max_tokens: int = 300) -> str:
+    def generate(self, prompt: str) -> str:
         output = self.llm.create_chat_completion(
             messages=[
                 {
@@ -82,7 +83,7 @@ class QwenClient(BaseLLMClient):
             temperature=0.15,
             top_p=0.85,
             repeat_penalty=1.1,
-            max_tokens=max_tokens
+            max_tokens=self.max_tokens
         )
 
         return output["choices"][0]["message"]["content"].strip()
