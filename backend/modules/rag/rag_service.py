@@ -1,8 +1,12 @@
 import re
+from enum import Enum
 
 from backend.modules.rag.rag_config import RAGResponse
 from backend.modules.rag.search_result_service import SearchResult
 
+class RAGMode(str, Enum):
+    USER_QUERY = "user_query"
+    DOCUMENT_ANALYSIS = "document_analysis"
 
 class RAGService:
 
