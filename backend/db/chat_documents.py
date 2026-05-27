@@ -44,11 +44,6 @@ class ChatDocument(Base, TimestampMixin):
         nullable=False
     )
 
-    file_path: Mapped[str] = mapped_column(
-        String(1024),
-        nullable=False
-    )
-
     mime_type: Mapped[Optional[str]] = mapped_column(
         String(255),
         nullable=True
