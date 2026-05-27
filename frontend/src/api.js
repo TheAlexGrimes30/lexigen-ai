@@ -136,7 +136,7 @@ export async function becomeAdmin(token) {
 
 export async function fetchAdminAnalytics(token) {
   const response = await fetchWithRetry(
-    `${API_BASE}/api/subscriptions/admin/analytics`,
+    `${API_BASE}/api/admin/analytics`,
     {
       headers: authHeaders(token),
     }
