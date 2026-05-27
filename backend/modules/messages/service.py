@@ -2,11 +2,11 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db import AnalysisResult, ChatDocument
-from backend.db.enums import MessageRole
+from backend.db.enums import MessageRole, UserRole
 from backend.db.messages import Message
 from backend.db.users import User
 from backend.modules.chats.service import chats_service
@@ -90,6 +90,12 @@ class MessagesService:
     ) -> tuple[Message, Message]:
 
         self._validate_document(file)
+
+        await self._ensure_document_analysis_allowed(
+            db=db,
+            user_id=user_id,
+        )
+
         original_filename = file.filename or "document"
         extracted_text = await self.document_parser.extract_text_from_upload(file)
 
@@ -158,6 +164,39 @@ class MessagesService:
         await db.commit()
         await db.refresh(system_message)
         return MessageResponse.model_validate(system_message)
+
+    async def _ensure_document_analysis_allowed(
+            self,
+            db: AsyncSession,
+            user_id: UUID
+    ) -> None:
+        user = await db.get(User, user_id)
+
+        if user and user.role == UserRole.admin:
+            return
+
+        has_subscription = await subscriptions_service.user_has_paid_subscription(
+            db,
+            user_id,
+        )
+
+        if has_subscription:
+            return
+
+        used_documents_count = await db.scalar(
+            select(func.count(ChatDocument.id)).where(
+                ChatDocument.uploaded_by == user_id
+            )
+        )
+
+        if int(used_documents_count or 0) >= 1:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Без подписки можно загрузить документ только один раз. "
+                    "Оформите подписку Basic, Pro или Enterprise."
+                ),
+            )
 
     def _validate_document(self, file: UploadFile) -> None:
 
