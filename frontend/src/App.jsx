@@ -310,13 +310,12 @@ export default function App() {
     }
   }
 
-  async function onDownloadAnalysis(analysisId, format) {
+  async function onDownloadAnalysis(analysisId) {
     try {
       setError("");
 
       await downloadAnalysisResult(
         analysisId,
-        format,
         authToken
       );
     } catch (e) {
@@ -604,16 +603,13 @@ export default function App() {
                       <div className="analysis-actions">
                         <button
                           type="button"
-                          onClick={() => onDownloadAnalysis(msg.analysis_result_id, "docx")}
+                          onClick={() =>
+                            onDownloadAnalysis(
+                              msg.analysis_result_id
+                            )
+                          }
                         >
                           Скачать DOCX
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => onDownloadAnalysis(msg.analysis_result_id, "pdf")}
-                        >
-                          Скачать PDF
                         </button>
                       </div>
                     )}

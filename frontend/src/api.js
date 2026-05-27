@@ -233,30 +233,34 @@ export async function sendMessage(chatId, content, file, token) {
 
 export async function downloadAnalysisResult(
   analysisId,
-  format,
   token
 ) {
   const response = await fetchWithRetry(
-    `${API_BASE}/api/analysis-results/${analysisId}/download?format=${format}`,
+    `${API_BASE}/api/analysis-results/${analysisId}/download`,
     {
       headers: authOnlyHeaders(token),
     }
   );
 
   if (!response.ok) {
-    throw new Error("Не удалось скачать результат анализа");
+    throw new Error(
+      "Не удалось скачать результат анализа"
+    );
   }
 
   const blob = await response.blob();
-  const extension = format === "pdf" ? "pdf" : "docx";
+
   const url = window.URL.createObjectURL(blob);
+
   const link = document.createElement("a");
 
   link.href = url;
-  link.download = `analysis_result.${extension}`;
+  link.download = "analysis_result.docx";
 
   document.body.appendChild(link);
+
   link.click();
+
   link.remove();
 
   window.URL.revokeObjectURL(url);
