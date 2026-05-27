@@ -16,6 +16,13 @@ import {
   updateSubscription,
 } from "./api";
 
+import AdminAnalyticsPage from "./components/AdminAnalyticsPage";
+import AuthPage from "./components/AuthPage";
+import ChatPage from "./components/ChatPage";
+import HomePage from "./components/HomePage";
+import ProfilePage from "./components/ProfilePage";
+import Topbar from "./components/Topbar";
+
 const TOKEN_KEY = "lexigen_token";
 const THEME_KEY = "lexigen_theme";
 
@@ -104,7 +111,9 @@ export default function App() {
   }, [authToken]);
 
   useEffect(() => {
-    if (!selectedChatId || !authToken) return;
+    if (!selectedChatId || !authToken) {
+      return;
+    }
 
     loadMessages(selectedChatId, authToken);
   }, [selectedChatId, authToken]);
@@ -141,6 +150,12 @@ export default function App() {
     setMessages([]);
     setSelectedChatId(null);
     setActiveTab("home");
+  }
+
+  function resetAuthFields() {
+    setAuthPassword("");
+    setAuthPasswordConfirm("");
+    setError("");
   }
 
   function handleLogout() {
@@ -198,7 +213,9 @@ export default function App() {
   }
 
   async function loadChats(token = authToken) {
-    if (!token) return;
+    if (!token) {
+      return;
+    }
 
     try {
       setError("");
@@ -220,45 +237,47 @@ export default function App() {
   }
 
   function startEditChat(chat) {
-      setEditingChatId(chat.id);
-      setEditingChatTitle(chat.title);
+    setEditingChatId(chat.id);
+    setEditingChatTitle(chat.title);
   }
 
   function cancelEditChat() {
-      setEditingChatId(null);
-      setEditingChatTitle("");
+    setEditingChatId(null);
+    setEditingChatTitle("");
   }
 
-async function saveChatTitle(chatId) {
-  const title = editingChatTitle.trim();
+  async function saveChatTitle(chatId) {
+    const title = editingChatTitle.trim();
 
-  if (!title || !authToken) {
-    return;
+    if (!title || !authToken) {
+      return;
+    }
+
+    try {
+      setError("");
+
+      const updatedChat = await updateChat(
+        chatId,
+        title,
+        authToken
+      );
+
+      setChats((prev) =>
+        prev.map((chat) =>
+          chat.id === chatId ? updatedChat : chat
+        )
+      );
+
+      cancelEditChat();
+    } catch (e) {
+      setError(e.message || "Ошибка изменения названия чата");
+    }
   }
-
-  try {
-    setError("");
-
-    const updatedChat = await updateChat(
-      chatId,
-      title,
-      authToken,
-    );
-
-    setChats((prev) =>
-      prev.map((chat) =>
-        chat.id === chatId ? updatedChat : chat
-      )
-    );
-
-    cancelEditChat();
-  } catch (e) {
-    setError(e.message || "Ошибка изменения названия чата");
-  }
-}
 
   async function loadSubscriptionData(token = authToken) {
-    if (!token) return;
+    if (!token) {
+      return;
+    }
 
     try {
       const [plans, subscription] = await Promise.all([
@@ -274,7 +293,9 @@ async function saveChatTitle(chatId) {
   }
 
   async function onSelectSubscription(plan) {
-    if (!authToken || isSubscriptionUpdating) return;
+    if (!authToken || isSubscriptionUpdating) {
+      return;
+    }
 
     try {
       setError("");
@@ -298,7 +319,9 @@ async function saveChatTitle(chatId) {
   }
 
   async function loadAdminAnalytics(token = authToken) {
-    if (!token) return;
+    if (!token) {
+      return;
+    }
 
     try {
       setIsAdminAnalyticsLoading(true);
@@ -314,7 +337,9 @@ async function saveChatTitle(chatId) {
   }
 
   async function loadMessages(chatId, token = authToken) {
-    if (!token) return;
+    if (!token) {
+      return;
+    }
 
     try {
       setError("");
@@ -331,7 +356,9 @@ async function saveChatTitle(chatId) {
   async function onCreateChat(e) {
     e.preventDefault();
 
-    if (!newChatTitle.trim() || !authToken) return;
+    if (!newChatTitle.trim() || !authToken) {
+      return;
+    }
 
     try {
       setError("");
@@ -443,7 +470,9 @@ async function saveChatTitle(chatId) {
   }
 
   async function onDeleteChat(chatId) {
-    if (!chatId || !authToken) return;
+    if (!chatId || !authToken) {
+      return;
+    }
 
     try {
       setError("");
@@ -470,535 +499,91 @@ async function saveChatTitle(chatId) {
 
   return (
     <div className="app-shell">
-      <header className="topbar">
-        <div className="logo">LexigenAI</div>
-
-        <div className="topbar-right">
-          <nav className="nav">
-            {currentUser
-              ? navItems.map((item) => (
-                  <button
-                    key={item.key}
-                    className={`nav-btn ${activeTab === item.key ? "active" : ""}`}
-                    onClick={() => setActiveTab(item.key)}
-                  >
-                    {item.label}
-                  </button>
-                ))
-              : [
-                  { key: "login", label: "Вход" },
-                  { key: "register", label: "Регистрация" },
-                ].map((item) => (
-                  <button
-                    key={item.key}
-                    className={`nav-btn ${authMode === item.key ? "active" : ""}`}
-                    onClick={() => {
-                      setAuthMode(item.key);
-                      setActiveTab(item.key);
-                      setAuthPassword("");
-                      setAuthPasswordConfirm("");
-                      setError("");
-                    }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-          </nav>
-
-          <button
-            type="button"
-            className="theme-toggle-btn"
-            onClick={toggleTheme}
-          >
-            {isLightTheme ? "Тёмная тема" : "Светлая тема"}
-          </button>
-        </div>
-      </header>
+      <Topbar
+        currentUser={currentUser}
+        navItems={navItems}
+        activeTab={activeTab}
+        authMode={authMode}
+        isLightTheme={isLightTheme}
+        onSetActiveTab={setActiveTab}
+        onSetAuthMode={setAuthMode}
+        onResetAuthFields={resetAuthFields}
+        onToggleTheme={toggleTheme}
+      />
 
       <main className={`page ${activeTab === "chats" ? "chats-page" : ""}`}>
-        {!currentUser && authMode === "login" && (
-          <section className="card auth-card">
-            <h2>Страница входа</h2>
-
-            <form onSubmit={handleAuthSubmit} className="auth-form">
-              <input
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="Email"
-                required
-              />
-
-              <input
-                type={isPasswordVisible ? "text" : "password"}
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder="Пароль"
-                required
-              />
-
-              <label className="password-toggle">
-                <span>Показать пароль</span>
-                <input
-                  type="checkbox"
-                  checked={isPasswordVisible}
-                  onChange={(e) => setIsPasswordVisible(e.target.checked)}
-                />
-              </label>
-
-              <button type="submit">Войти</button>
-            </form>
-          </section>
-        )}
-
-        {!currentUser && authMode === "register" && (
-          <section className="card auth-card">
-            <h2>Страница регистрации</h2>
-
-            <form onSubmit={handleAuthSubmit} className="auth-form">
-              <input
-                value={authName}
-                onChange={(e) => setAuthName(e.target.value)}
-                placeholder="Имя"
-                required
-              />
-
-              <input
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="Email"
-                required
-              />
-
-              <input
-                type={isPasswordVisible ? "text" : "password"}
-                value={authPassword}
-                onChange={(e) => setAuthPassword(e.target.value)}
-                placeholder="Пароль"
-                required
-              />
-
-              <input
-                type={isPasswordVisible ? "text" : "password"}
-                value={authPasswordConfirm}
-                onChange={(e) => setAuthPasswordConfirm(e.target.value)}
-                placeholder="Подтверждение пароля"
-                required
-              />
-
-              <label className="password-toggle">
-                <span>Показать пароль</span>
-                <input
-                  type="checkbox"
-                  checked={isPasswordVisible}
-                  onChange={(e) => setIsPasswordVisible(e.target.checked)}
-                />
-              </label>
-
-              <button type="submit">Создать аккаунт</button>
-            </form>
-          </section>
+        {!currentUser && (
+          <AuthPage
+            authMode={authMode}
+            authName={authName}
+            authEmail={authEmail}
+            authPassword={authPassword}
+            authPasswordConfirm={authPasswordConfirm}
+            isPasswordVisible={isPasswordVisible}
+            onSetAuthName={setAuthName}
+            onSetAuthEmail={setAuthEmail}
+            onSetAuthPassword={setAuthPassword}
+            onSetAuthPasswordConfirm={setAuthPasswordConfirm}
+            onSetIsPasswordVisible={setIsPasswordVisible}
+            onSubmit={handleAuthSubmit}
+          />
         )}
 
         {currentUser && activeTab === "home" && (
-          <section className="home-page">
-            <div className="card hero hero-modern">
-              <div className="hero-content">
-                <span className="hero-badge">LexigenAI · Credit Law Assistant</span>
-                <h1>Анализ кредитных договоров с RAG по базе знаний</h1>
-                <p>
-                  Загружайте DOCX/PDF договоры, получайте юридический анализ рисков,
-                  слабых условий и рекомендаций, а затем скачивайте результат в DOCX.
-                </p>
-
-                <div className="hero-actions">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("chats")}
-                  >
-                    Начать анализ
-                  </button>
-
-                  <button
-                    type="button"
-                    className="secondary-action"
-                    onClick={() => setActiveTab("profile")}
-                  >
-                    Посмотреть подписку
-                  </button>
-                </div>
-              </div>
-
-              <div className="hero-panel">
-                <div className="hero-panel-item">
-                  <strong>RAG</strong>
-                  <span>по нормам кредитного права</span>
-                </div>
-                <div className="hero-panel-item">
-                  <strong>DOCX/PDF</strong>
-                  <span>загрузка документов в чат</span>
-                </div>
-                <div className="hero-panel-item">
-                  <strong>DOCX</strong>
-                  <span>скачивание результата анализа</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="home-features">
-              <div className="card feature-card">
-                <div className="feature-icon">⚖️</div>
-                <h3>Юридические риски</h3>
-                <p>Ассистент выделяет спорные условия, пробелы договора и потенциальные риски.</p>
-              </div>
-
-              <div className="card feature-card">
-                <div className="feature-icon">📄</div>
-                <h3>Документы в чате</h3>
-                <p>Пользователь может прикрепить договор, а система автоматически отправит текст в RAG-анализ.</p>
-              </div>
-
-              <div className="card feature-card">
-                <div className="feature-icon">💼</div>
-                <h3>Подписки</h3>
-                <p>Basic, Pro и Enterprise снимают ограничение на количество анализируемых документов.</p>
-              </div>
-            </div>
-          </section>
+          <HomePage
+            onOpenChats={() => setActiveTab("chats")}
+            onOpenProfile={() => setActiveTab("profile")}
+          />
         )}
 
         {currentUser && activeTab === "profile" && (
-          <section className="card stub">
-            <h2>Личный кабинет</h2>
-
-            <div className="profile-info">
-              <p>Имя: {currentUser.name}</p>
-              <p>Email: {currentUser.email}</p>
-              <p>Роль: {currentUser.role}</p>
-              <p>
-                Текущая подписка:{" "}
-                <strong>
-                  {currentSubscription?.title || "Без подписки"}
-                </strong>
-              </p>
-            </div>
-
-            <div className="subscription-section">
-              <h3>Подписки</h3>
-              <p className="subscription-note">
-                Без подписки пользователь может загрузить документ только один раз.
-                Пользователи с подпиской могут анализировать документы без лимита.
-                Администратор может анализировать документы без подписки.
-              </p>
-
-              <div className="subscription-grid">
-                {subscriptionPlans.map((plan) => (
-                  <div
-                    key={plan.plan}
-                    className={`subscription-card ${
-                      currentSubscription?.plan === plan.plan
-                        ? "active"
-                        : ""
-                    }`}
-                  >
-                    <h4>{plan.title}</h4>
-                    <div className="subscription-price">
-                      {plan.price_rub.toLocaleString("ru-RU")} ₽
-                    </div>
-                    <p>{plan.description}</p>
-
-                    <button
-                      type="button"
-                      disabled={
-                        isSubscriptionUpdating ||
-                        currentSubscription?.plan === plan.plan
-                      }
-                      onClick={() => onSelectSubscription(plan.plan)}
-                    >
-                      {currentSubscription?.plan === plan.plan
-                        ? "Активна"
-                        : "Выбрать"}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <button
-              type="button"
-              className="profile-logout-btn"
-              onClick={handleLogout}
-            >
-              Выйти из аккаунта
-            </button>
-          </section>
+          <ProfilePage
+            currentUser={currentUser}
+            currentSubscription={currentSubscription}
+            subscriptionPlans={subscriptionPlans}
+            isSubscriptionUpdating={isSubscriptionUpdating}
+            onSelectSubscription={onSelectSubscription}
+            onLogout={handleLogout}
+          />
         )}
 
         {currentUser && currentUser.role === "admin" && activeTab === "analytics" && (
-          <section className="card stub">
-            <div className="admin-analytics-header">
-              <h2>Аналитика</h2>
-
-              <button
-                type="button"
-                onClick={() => loadAdminAnalytics(authToken)}
-                disabled={isAdminAnalyticsLoading}
-              >
-                {isAdminAnalyticsLoading ? "Обновление..." : "Обновить"}
-              </button>
-            </div>
-
-            <div className="analytics-grid">
-              <div className="analytics-card">
-                <span>Всего пользователей</span>
-                <strong>{adminAnalytics?.total_users ?? 0}</strong>
-              </div>
-
-              <div className="analytics-card">
-                <span>Без подписки</span>
-                <strong>{adminAnalytics?.without_subscription ?? 0}</strong>
-              </div>
-
-              <div className="analytics-card">
-                <span>Basic</span>
-                <strong>{adminAnalytics?.by_plan?.basic ?? 0}</strong>
-              </div>
-
-              <div className="analytics-card">
-                <span>Pro</span>
-                <strong>{adminAnalytics?.by_plan?.pro ?? 0}</strong>
-              </div>
-
-              <div className="analytics-card">
-                <span>Enterprise</span>
-                <strong>{adminAnalytics?.by_plan?.enterprise ?? 0}</strong>
-              </div>
-            </div>
-          </section>
+          <AdminAnalyticsPage
+            adminAnalytics={adminAnalytics}
+            isAdminAnalyticsLoading={isAdminAnalyticsLoading}
+            onRefresh={() => loadAdminAnalytics(authToken)}
+          />
         )}
 
         {currentUser && activeTab === "chats" && (
-          <section className={`chat-layout ${isChatSidebarVisible ? "" : "sidebar-hidden"}`}>
-            {isChatSidebarVisible && (
-              <aside className="chat-sidebar card">
-                <h3>Ваши чаты</h3>
-
-                <form onSubmit={onCreateChat} className="new-chat-form">
-                  <input
-                    value={newChatTitle}
-                    onChange={(e) => setNewChatTitle(e.target.value)}
-                    placeholder="Название нового чата"
-                  />
-                  <button type="submit">Создать чат</button>
-                </form>
-
-                <div className="chat-list">
-                  {chats.map((chat) => (
-                    <div
-                      key={chat.id}
-                      className={`chat-item-row ${chat.id === selectedChatId ? "active" : ""}`}
-                    >
-                      {editingChatId === chat.id ? (
-                        <form
-                          className="chat-edit-form"
-                          onSubmit={(e) => {
-                            e.preventDefault();
-                            saveChatTitle(chat.id);
-                          }}
-                        >
-                          <input
-                            value={editingChatTitle}
-                            onChange={(e) =>
-                              setEditingChatTitle(e.target.value)
-                            }
-                            autoFocus
-                            onKeyDown={(e) => {
-                              if (e.key === "Escape") {
-                                cancelEditChat();
-                              }
-                            }}
-                          />
-
-                          <button
-                            type="submit"
-                            className="chat-edit-save"
-                            title="Сохранить"
-                          >
-                            ✓
-                          </button>
-
-                          <button
-                            type="button"
-                            className="chat-edit-cancel"
-                            onClick={cancelEditChat}
-                            title="Отменить"
-                          >
-                            ×
-                          </button>
-                        </form>
-                      ) : (
-                        <>
-                          <button
-                            className={`chat-item ${
-                              chat.id === selectedChatId
-                                ? "active"
-                                : ""
-                            }`}
-                            onClick={() =>
-                              setSelectedChatId(chat.id)
-                            }
-                          >
-                            {chat.title}
-                          </button>
-
-                          <button
-                            type="button"
-                            className="chat-item-edit"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startEditChat(chat);
-                            }}
-                            title="Редактировать чат"
-                            aria-label="Редактировать чат"
-                          >
-                            ✏️
-                          </button>
-
-                          <button
-                            type="button"
-                            className="chat-item-delete"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onDeleteChat(chat.id);
-                            }}
-                            title="Удалить чат"
-                            aria-label="Удалить чат"
-                          >
-                            🗑
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </aside>
-            )}
-
-            <div className="chat-main card">
-              <div className="chat-main-header">
-                <h3>{selectedChat ? selectedChat.title : "Выберите чат"}</h3>
-
-                <button
-                  type="button"
-                  className="toggle-sidebar-btn"
-                  onClick={() => setIsChatSidebarVisible((prev) => !prev)}
-                >
-                  {isChatSidebarVisible ? "Скрыть панель чатов" : "Показать панель чатов"}
-                </button>
-              </div>
-
-              <div className="messages">
-                {messages.length === 0 && (
-                  <div className="empty-state">
-                    Сообщений пока нет. Начните диалог.
-                  </div>
-                )}
-
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`message ${msg.role}`}>
-                    <div className="message-role">
-                      {msg.role === "user"
-                        ? "Вы"
-                        : msg.role === "assistant"
-                          ? "Ассистент"
-                          : "Система"}
-                    </div>
-
-                    <div className="message-content">
-                      {msg.content}
-                    </div>
-
-                    {msg.analysis_result_id && (
-                      <div className="analysis-actions">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onDownloadAnalysis(
-                              msg.analysis_result_id
-                            )
-                          }
-                        >
-                          Скачать DOCX
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {isMessageSending && (
-                  <div className="message assistant loading-message">
-                    <div className="message-role">Ассистент</div>
-                    <div className="typing-indicator" aria-label="Ассистент готовит ответ">
-                      <span></span>
-                      <span></span>
-                      <span></span>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <form onSubmit={onSendMessage} className="message-form">
-                <button
-                  type="button"
-                  className="attach-file-btn"
-                  disabled={!selectedChatId || isMessageSending}
-                  onClick={() => fileInputRef.current?.click()}
-                  title="Добавить DOCX или PDF"
-                >
-                  +
-                </button>
-
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".docx,.pdf"
-                  className="hidden-file-input"
-                  onChange={onFileChange}
-                  disabled={!selectedChatId || isMessageSending}
-                />
-
-                <input
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  placeholder={
-                    selectedFile
-                      ? "Можно добавить комментарий к документу..."
-                      : "Введите сообщение..."
-                  }
-                  disabled={!selectedChatId || isMessageSending}
-                />
-
-                <button
-                  type="submit"
-                  disabled={!selectedChatId || isMessageSending}
-                >
-                  {isMessageSending ? "Обработка..." : "Отправить"}
-                </button>
-              </form>
-
-              {selectedFile && (
-                <div className="selected-file">
-                  <span>Файл выбран: {selectedFile.name}</span>
-
-                  <button
-                    type="button"
-                    onClick={clearSelectedFile}
-                  >
-                    Убрать
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
+          <ChatPage
+            fileInputRef={fileInputRef}
+            chats={chats}
+            selectedChat={selectedChat}
+            selectedChatId={selectedChatId}
+            messages={messages}
+            newChatTitle={newChatTitle}
+            messageText={messageText}
+            selectedFile={selectedFile}
+            isMessageSending={isMessageSending}
+            isChatSidebarVisible={isChatSidebarVisible}
+            editingChatId={editingChatId}
+            editingChatTitle={editingChatTitle}
+            onSetIsChatSidebarVisible={setIsChatSidebarVisible}
+            onSetSelectedChatId={setSelectedChatId}
+            onSetNewChatTitle={setNewChatTitle}
+            onSetMessageText={setMessageText}
+            onSetEditingChatTitle={setEditingChatTitle}
+            onCreateChat={onCreateChat}
+            onStartEditChat={startEditChat}
+            onCancelEditChat={cancelEditChat}
+            onSaveChatTitle={saveChatTitle}
+            onDeleteChat={onDeleteChat}
+            onFileChange={onFileChange}
+            onSendMessage={onSendMessage}
+            onClearSelectedFile={clearSelectedFile}
+            onDownloadAnalysis={onDownloadAnalysis}
+          />
         )}
 
         {error && <div className="error-box">{error}</div>}
