@@ -193,6 +193,22 @@ export async function deleteChat(chatId, token) {
   );
 }
 
+export async function updateChat(chatId, title, token) {
+  const response = await fetchWithRetry(
+    `${API_BASE}/api/chats/${chatId}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ title }),
+    }
+  );
+
+  return parseOrThrow(
+    response,
+    "Не удалось изменить название чата"
+  );
+}
+
 export async function fetchMessages(chatId, token) {
   const response = await fetchWithRetry(
     `${API_BASE}/api/chats/${chatId}/messages`,
@@ -265,3 +281,4 @@ export async function downloadAnalysisResult(
 
   window.URL.revokeObjectURL(url);
 }
+

@@ -4,6 +4,7 @@ import {
   deleteChat,
   downloadAnalysisResult,
   fetchChats,
+  updateChat,
   fetchMe,
   fetchMessages,
   login,
@@ -41,6 +42,9 @@ export default function App() {
 
   const [chats, setChats] = useState([]);
   const [selectedChatId, setSelectedChatId] = useState(null);
+  const [editingChatId, setEditingChatId] = useState(null);
+  const [editingChatTitle, setEditingChatTitle] = useState("");
+
   const [messages, setMessages] = useState([]);
   const [newChatTitle, setNewChatTitle] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -193,6 +197,44 @@ export default function App() {
       setError(e.message || "Ошибка загрузки чатов");
     }
   }
+
+  function startEditChat(chat) {
+      setEditingChatId(chat.id);
+      setEditingChatTitle(chat.title);
+  }
+
+  function cancelEditChat() {
+      setEditingChatId(null);
+      setEditingChatTitle("");
+  }
+
+async function saveChatTitle(chatId) {
+  const title = editingChatTitle.trim();
+
+  if (!title || !authToken) {
+    return;
+  }
+
+  try {
+    setError("");
+
+    const updatedChat = await updateChat(
+      chatId,
+      title,
+      authToken,
+    );
+
+    setChats((prev) =>
+      prev.map((chat) =>
+        chat.id === chatId ? updatedChat : chat
+      )
+    );
+
+    cancelEditChat();
+  } catch (e) {
+    setError(e.message || "Ошибка изменения названия чата");
+  }
+}
 
   async function loadMessages(chatId, token = authToken) {
     if (!token) return;
@@ -540,25 +582,86 @@ export default function App() {
                       key={chat.id}
                       className={`chat-item-row ${chat.id === selectedChatId ? "active" : ""}`}
                     >
-                      <button
-                        className={`chat-item ${chat.id === selectedChatId ? "active" : ""}`}
-                        onClick={() => setSelectedChatId(chat.id)}
-                      >
-                        {chat.title}
-                      </button>
+                      {editingChatId === chat.id ? (
+                        <form
+                          className="chat-edit-form"
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            saveChatTitle(chat.id);
+                          }}
+                        >
+                          <input
+                            value={editingChatTitle}
+                            onChange={(e) =>
+                              setEditingChatTitle(e.target.value)
+                            }
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Escape") {
+                                cancelEditChat();
+                              }
+                            }}
+                          />
 
-                      <button
-                        type="button"
-                        className="chat-item-delete"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteChat(chat.id);
-                        }}
-                        title="Удалить чат"
-                        aria-label="Удалить чат"
-                      >
-                        🗑
-                      </button>
+                          <button
+                            type="submit"
+                            className="chat-edit-save"
+                            title="Сохранить"
+                          >
+                            ✓
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-edit-cancel"
+                            onClick={cancelEditChat}
+                            title="Отменить"
+                          >
+                            ×
+                          </button>
+                        </form>
+                      ) : (
+                        <>
+                          <button
+                            className={`chat-item ${
+                              chat.id === selectedChatId
+                                ? "active"
+                                : ""
+                            }`}
+                            onClick={() =>
+                              setSelectedChatId(chat.id)
+                            }
+                          >
+                            {chat.title}
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-item-edit"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              startEditChat(chat);
+                            }}
+                            title="Редактировать чат"
+                            aria-label="Редактировать чат"
+                          >
+                            ✏️
+                          </button>
+
+                          <button
+                            type="button"
+                            className="chat-item-delete"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteChat(chat.id);
+                            }}
+                            title="Удалить чат"
+                            aria-label="Удалить чат"
+                          >
+                            🗑
+                          </button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>

@@ -473,3 +473,49 @@ button:disabled {
     min-height: auto;
   }
 }
+
+.chat-item-edit {
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 9px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(4px);
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.chat-item-row:hover .chat-item-edit,
+.chat-item-row.active .chat-item-edit {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.chat-edit-form {
+  display: flex;
+  width: 100%;
+  gap: 6px;
+}
+
+.chat-edit-form input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  font-size: 13px;
+}
+
+.chat-edit-save,
+.chat-edit-cancel {
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 9px;
+}
+
+.chat-edit-cancel {
+  border-color: rgba(255, 110, 110, 0.55);
+  background: linear-gradient(135deg, #5a1d2b 0%, #9c3046 60%, #d5465d 100%);
+}
