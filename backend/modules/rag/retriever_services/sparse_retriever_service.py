@@ -4,7 +4,8 @@ from typing import Optional, Any
 from llama_index.core import Document
 from rank_bm25 import BM25Okapi
 
-from backend.modules.rag.retriever_services.retriever_service import ChunkAdapter, TextTokenizer
+from backend.modules.rag.retriever_services.retriever_service import ChunkAdapter, TextTokenizer, SearchResultFactory, \
+    MetadataAdapter
 from backend.modules.rag.search_result_service import SearchResult
 
 
@@ -31,8 +32,14 @@ class BM25SparseRetriever(BaseSparseRetriever):
 
     def __init__(
             self,
+            config: HybridRetrieverConfig,
             chunks: Optional[list[Any]] = None
-    ):
+    ) -> None:
+        """
+        Initialize BM25 retriever.
+        """
+
+        self.config = config
         self.documents: list[Document] = []
         self.tokenized_corpus: list[list[str]] = []
         self.bm25: Optional[BM25Okapi] = None
@@ -43,15 +50,15 @@ class BM25SparseRetriever(BaseSparseRetriever):
     def build(
             self,
             chunks: list[Any]
-    ) -> None:
-        """
-        Build BM25 index from chunks.
-        """
+    ):
 
         documents: list[Document] = []
 
         for chunk in chunks:
-            document = ChunkAdapter.to_llama_document(chunk)
+            document = ChunkAdapter.to_llama_document(
+                chunk=chunk,
+                config=self.config
+            )
 
             if document is not None:
                 documents.append(document)
@@ -102,6 +109,11 @@ class BM25SparseRetriever(BaseSparseRetriever):
                 continue
 
             document = self.documents[index]
+
+            payload = MetadataAdapter.normalize_payload(
+                payload=dict(document.metadata or {}),
+                config=self.config
+            )
 
             payload["retrieval_source"] = "bm25"
 

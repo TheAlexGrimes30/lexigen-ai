@@ -1,7 +1,9 @@
 import hashlib
 from abc import abstractmethod, ABC
+from typing import Any
 
 from backend.modules.rag.rag_embedder import Embedder
+from backend.modules.rag.retriever_services.hybrid_retriever_service import HybridRetrieverConfig
 from backend.modules.rag.retriever_services.retriever_service import BaseRetriever, MetadataAdapter
 from backend.modules.rag.search_result_service import SearchResult
 
@@ -33,10 +35,7 @@ class QdrantDenseRetriever(BaseDenseRetriever):
             self,
             vector_store: Any,
             config: HybridRetrieverConfig
-    ) -> None:
-        """
-        Initialize dense retriever.
-        """
+    ):
 
         self.vector_store = vector_store
         self.config = config
