@@ -23,38 +23,6 @@ class BaseDenseRetriever(ABC):
         raise NotImplementedError
 
 
-class BaseRetriever(ABC):
-    """
-    Abstract interface for retrievers.
-
-    Retriever converts text query into embeddings
-    and returns relevant search results.
-    """
-
-    @abstractmethod
-    def retrieve(
-        self,
-        query: str,
-        top_k: int = 10
-    ) -> list[SearchResult]:
-        """
-        Retrieve relevant chunks for a query.
-
-        Args:
-            query (str):
-                User query.
-
-            top_k (int):
-                Number of chunks to return.
-
-        Returns:
-            List[SearchResult]:
-                Retrieved chunks.
-        """
-
-        raise NotImplementedError
-
-
 class QdrantDenseRetriever(BaseDenseRetriever):
 
     def __init__(self, vector_store):

@@ -4,7 +4,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance
 
 from backend.modules.rag.chuncking import HybridLegalChunker
-from backend.modules.rag.dense_retriever_service import Retriever
+from backend.modules.rag.retriever_services.dense_retriever_service import Retriever
 from backend.modules.rag.generator import ContextCleaner, CreditPromptBuilder, QwenClient, Generator
 from backend.modules.rag.index_service import IndexService
 from backend.modules.rag.ingestion_service import MarkdownDocumentLoader, IngestionPipeline, IngestionService
