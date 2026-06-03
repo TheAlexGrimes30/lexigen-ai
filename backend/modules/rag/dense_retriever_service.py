@@ -7,10 +7,7 @@ from backend.modules.rag.search_result_service import SearchResult
 
 class BaseDenseRetriever(ABC):
     """
-    Abstract interface for dense vector retrievers.
-
-    Dense retrievers perform semantic similarity search
-    using embedding vectors.
+    Abstract interface for dense retrievers.
     """
 
     @abstractmethod
@@ -20,18 +17,7 @@ class BaseDenseRetriever(ABC):
         k: int
     ) -> list[SearchResult]:
         """
-        Execute dense vector similarity search.
-
-        Args:
-            query_vec (List[float]):
-                Query embedding vector.
-
-            k (int):
-                Number of documents to retrieve.
-
-        Returns:
-            List[SearchResult]:
-                Retrieved search results.
+        Search by dense vector.
         """
 
         raise NotImplementedError
