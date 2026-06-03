@@ -37,9 +37,6 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
             config: HybridRetrieverConfig,
             chunks: Optional[list[Any]] = None
     ) -> None:
-        """
-        Initialize metadata graph retriever.
-        """
 
         self.config = config
         self.documents: list[Document] = []
@@ -189,7 +186,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
             value: str
     ) -> str:
         """
-        Extract document id from common ids like law_article_133_1.
+        Extract document id from common ids.
 
         This is generic syntax parsing, not a domain-specific correction.
         """
