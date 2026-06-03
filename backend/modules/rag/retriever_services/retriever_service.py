@@ -283,24 +283,3 @@ class TextTokenizer:
             for token in cls.TOKEN_PATTERN.findall(text or "")
         ]
 
-
-class TextTokenizer:
-    """
-    Simple Russian-friendly tokenizer for BM25.
-    """
-
-    TOKEN_PATTERN = re.compile(r"[а-яА-ЯёЁa-zA-Z0-9_.]+")
-
-    @classmethod
-    def tokenize(
-            cls,
-            text: str
-    ) -> list[str]:
-        """
-        Tokenize text.
-        """
-
-        return [
-            token.lower()
-            for token in cls.TOKEN_PATTERN.findall(text or "")
-        ]

@@ -2,7 +2,7 @@ import hashlib
 from abc import abstractmethod, ABC
 
 from backend.modules.rag.rag_embedder import Embedder
-from backend.modules.rag.retriever_services.retriever_service import BaseRetriever
+from backend.modules.rag.retriever_services.retriever_service import BaseRetriever, MetadataAdapter
 from backend.modules.rag.search_result_service import SearchResult
 
 
@@ -29,13 +29,22 @@ class QdrantDenseRetriever(BaseDenseRetriever):
     Dense retriever based on Qdrant.
     """
 
-    def __init__(self, vector_store):
+    def __init__(
+            self,
+            vector_store: Any,
+            config: HybridRetrieverConfig
+    ) -> None:
+        """
+        Initialize dense retriever.
+        """
+
         self.vector_store = vector_store
+        self.config = config
 
     def search(
-        self,
-        query_vec: list[float],
-        k: int
+            self,
+            query_vec: list[float],
+            k: int
     ) -> list[SearchResult]:
         """
         Search Qdrant.
@@ -50,8 +59,15 @@ class QdrantDenseRetriever(BaseDenseRetriever):
 
         for hit in hits:
             result = SearchResult.from_qdrant(hit)
+
             if result.text and result.text.strip():
+                result.payload = MetadataAdapter.normalize_payload(
+                    payload=result.payload or {},
+                    config=self.config
+                )
+
                 result.payload["retrieval_source"] = "dense"
+
                 results.append(result)
 
         return results
