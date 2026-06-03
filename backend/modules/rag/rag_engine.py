@@ -97,7 +97,6 @@ class RAG:
             min_final_score=0.50,
         )
 
-
     def build_and_index(self) -> list:
         """
         Load chunks and index them if collection is empty.
@@ -118,8 +117,8 @@ class RAG:
         return chunks
 
     def index_if_needed(
-        self,
-        chunks: list
+            self,
+            chunks: list
     ) -> None:
         """
         Index chunks only if collection is empty.
@@ -141,7 +140,6 @@ class RAG:
         points_count = info.points_count
 
         if points_count > 0:
-
             print(
                 f"[Index] Skipping indexing — "
                 f"collection already has "
@@ -160,11 +158,11 @@ class RAG:
         print("[Index] Done indexing")
 
     def search(
-        self,
-        query: str,
-        retrieve_top_k: int = 20,
-        rerank_top_n: int = 5,
-        use_reranker: bool = True
+            self,
+            query: str,
+            retrieve_top_k: int = 20,
+            rerank_top_n: int = 5,
+            use_reranker: bool = True
     ) -> list[SearchResult]:
         """
         Perform retrieval and optional reranking.
@@ -217,11 +215,10 @@ class RAG:
 
         return response.answer
 
-
     def debug_dense_retrieval(
-        self,
-        query: str,
-        top_k: int = 10
+            self,
+            query: str,
+            top_k: int = 10
     ) -> None:
         """
         Debug dense retrieval results.
@@ -251,10 +248,9 @@ class RAG:
         )
 
         for i, hit in enumerate(
-            hits,
-            start=1
+                hits,
+                start=1
         ):
-
             payload = hit.payload or {}
 
             print("\n" + "-" * 100)
@@ -282,12 +278,11 @@ class RAG:
                 (hit.text or "")[:1200]
             )
 
-
     def debug_search_pipeline(
-        self,
-        query: str,
-        retrieve_top_k: int = 20,
-        rerank_top_n: int = 5
+            self,
+            query: str,
+            retrieve_top_k: int = 20,
+            rerank_top_n: int = 5
     ) -> None:
         """
         Debug full retrieval + reranking pipeline.
@@ -332,10 +327,9 @@ class RAG:
         )
 
         for i, hit in enumerate(
-            final_hits,
-            start=1
+                final_hits,
+                start=1
         ):
-
             payload = hit.payload or {}
 
             print("\n" + "-" * 100)
