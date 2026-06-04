@@ -26,8 +26,8 @@ class HybridRetrieverConfig:
     """
 
     alpha: float = 0.88
-    graph_weight: float = 0.025
-    metadata_weight: float = 0.04
+    graph_weight: float = 0.04
+    metadata_weight: float = 0.05
     pool_multiplier: int = 8
     max_pool_size: int = 80
     min_text_len: int = 40
@@ -76,7 +76,7 @@ class HybridRetrieverConfig:
     enable_related_article_edges: bool = True
     enable_semantic_triple_edges: bool = True
 
-    content_reference_weight: float = 0.95
+    content_reference_weight: float = 1.2
     tree_edge_weight: float = 0.65
     related_article_weight: float = 0.75
     semantic_triple_weight: float = 0.70
