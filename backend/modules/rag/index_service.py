@@ -1,3 +1,5 @@
+"""Index Service for chunk index in Qdrant"""
+
 from backend.modules.rag.rag_config import Chunk
 from backend.modules.rag.rag_embedder import Embedder
 from backend.modules.rag.storage import VectorStore

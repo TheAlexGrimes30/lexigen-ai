@@ -4,13 +4,13 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance
 
 from backend.modules.rag.chuncking import HybridLegalChunker
-from backend.modules.rag.dense_retriever_service import Retriever
 from backend.modules.rag.generator import ContextCleaner, CreditPromptBuilder, QwenClient, Generator
 from backend.modules.rag.index_service import IndexService
 from backend.modules.rag.ingestion_service import MarkdownDocumentLoader, IngestionPipeline, IngestionService
 from backend.modules.rag.rag_embedder import Embedder
 from backend.modules.rag.rag_service import RAGService, RAGMode
 from backend.modules.rag.reranker_service import Reranker
+from backend.modules.rag.retriever_service import Retriever
 from backend.modules.rag.search_result_service import SearchResult
 from backend.modules.rag.storage import VectorStore
 
@@ -27,7 +27,7 @@ class RAG:
     - answer generation
     """
 
-    def __init__(self, n_ctx: int = 2048, max_tokens: int = 400) -> None:
+    def __init__(self, n_ctx: int = 2048) -> None:
         base_path = Path(__file__).resolve()
         project_root = base_path.parents[3]
 
@@ -56,7 +56,7 @@ class RAG:
 
         self.vector_store = VectorStore(
             client=self.qdrant,
-            collection_name="credit_collection",
+            collection_name="credit_graph_collection",
             vector_size=self.embedder.dim,
             distance=Distance.COSINE,
         )
@@ -71,7 +71,6 @@ class RAG:
         self.retriever = Retriever(
             vector_store=self.vector_store,
             embedder=self.embedder,
-            max_pool_size=50,
         )
 
         self.reranker = Reranker(
@@ -112,6 +111,7 @@ class RAG:
 
         print(f"Loaded chunks: {len(chunks)}")
 
+        self.retriever.build_sparse_and_graph(chunks)
         self.index_if_needed(chunks)
 
         return chunks
@@ -201,8 +201,7 @@ class RAG:
 
     def ask(self, query: str) -> str:
         response = self.rag_service.ask(
-            query=query,
-            mode=RAGMode.USER_QUERY,
+            query=query
         )
 
         return response.answer
@@ -215,147 +214,6 @@ class RAG:
 
         return response.answer
 
-    def debug_dense_retrieval(
-            self,
-            query: str,
-            top_k: int = 10
-    ) -> None:
-        """
-        Debug dense retrieval results.
-
-        Args:
-            query (str):
-                Search query.
-
-            top_k (int):
-                Number of retrieved chunks.
-
-        Returns:
-            None
-        """
-
-        print("\n" + "=" * 100)
-
-        print("[DENSE RETRIEVAL DEBUG]")
-
-        print(f"QUERY: {query}")
-
-        print("=" * 100)
-
-        hits = self.retriever.retrieve(
-            query=query,
-            top_k=top_k
-        )
-
-        for i, hit in enumerate(
-                hits,
-                start=1
-        ):
-            payload = hit.payload or {}
-
-            print("\n" + "-" * 100)
-
-            print(f"DENSE TOP {i}")
-
-            print(
-                f"SCORE   : "
-                f"{hit.score:.4f}"
-            )
-
-            print(
-                f"ARTICLE : "
-                f"{payload.get('article_number', 'unknown')}"
-            )
-
-            print(
-                f"HEADER  : "
-                f"{payload.get('header', 'unknown')}"
-            )
-
-            print("\nTEXT:\n")
-
-            print(
-                (hit.text or "")[:1200]
-            )
-
-    def debug_search_pipeline(
-            self,
-            query: str,
-            retrieve_top_k: int = 20,
-            rerank_top_n: int = 5
-    ) -> None:
-        """
-        Debug full retrieval + reranking pipeline.
-
-        Args:
-            query (str):
-                User query.
-
-            retrieve_top_k (int):
-                Retriever top-k.
-
-            rerank_top_n (int):
-                Final reranker top-n.
-
-        Returns:
-            None
-        """
-
-        print("\n" + "=" * 100)
-
-        print("[FULL SEARCH PIPELINE DEBUG]")
-
-        print(f"QUERY: {query}")
-
-        print("=" * 100)
-
-        dense_hits = self.retriever.retrieve(
-            query=query,
-            top_k=retrieve_top_k
-        )
-
-        print("\n" + "=" * 100)
-
-        print("RERANKER OUTPUT")
-
-        print("=" * 100)
-
-        final_hits = self.reranker.rerank(
-            query=query,
-            hits=dense_hits,
-            top_n=rerank_top_n
-        )
-
-        for i, hit in enumerate(
-                final_hits,
-                start=1
-        ):
-            payload = hit.payload or {}
-
-            print("\n" + "-" * 100)
-
-            print(f"FINAL TOP {i}")
-
-            print(
-                f"SCORE   : "
-                f"{hit.score:.4f}"
-            )
-
-            print(
-                f"ARTICLE : "
-                f"{payload.get('article_number')}"
-            )
-
-            print(
-                f"HEADER  : "
-                f"{payload.get('header')}"
-            )
-
-            print("\nTEXT:\n")
-
-            print(
-                (hit.text or "")[:1200]
-            )
 
     def close(self) -> None:
         """

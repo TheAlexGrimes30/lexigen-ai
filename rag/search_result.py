@@ -128,10 +128,14 @@ class RerankMapper:
 
     @classmethod
     def map(cls, base: SearchResult, score: float) -> SearchResult:
-        return SearchResult(
+        result = SearchResult(
             text=base.text,
             score=float(score),
             payload=base.payload.copy(),
             id=base.id,
             source=f"{base.source}+reranker" if base.source else "reranker",
         )
+        # Backward compatibility with services that filter by final_score.
+        result.final_score = float(score)
+        result.payload["final_score"] = float(score)
+        return result

@@ -7,16 +7,16 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance
 
 from rag.dense_retriever import (
-    Embedder,
-    Retriever
+    Embedder
 )
 
 from rag.generator import (
     ContextCleaner,
     Generator,
     LaborPromptBuilder,
-    QwenClient, ContractRiskAnalysisPromptBuilder
+    QwenClient
 )
+from rag.hybrid_retriever import Retriever
 
 from rag.rag_service import (
     RAGService
@@ -39,6 +39,8 @@ from rag.ingestion import (
 from rag.rag_chunkers import (
     HybridLegalChunker
 )
+from rag.retriever_dataset import dataset
+from rag.retriever_evaluation import evaluate_rag
 
 from rag.storage import (
     VectorStore
@@ -72,9 +74,8 @@ class RAG:
         base_path = Path(__file__).resolve()
         project_root = base_path.parents[1]
         model_path = project_root / "models" / "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
-
+        reranker_path = project_root / "models" / "bge-reranker-v2-m3"
         rag_db_path = project_root / "rag_db"
-
         self.debug_path = project_root / "debug"
 
 
@@ -108,7 +109,7 @@ class RAG:
 
         self.vector_store = VectorStore(
             client=self.qdrant,
-            collection_name="credit_collection",
+            collection_name="credit_graph_collection",
             vector_size=self.embedder.dim,
             distance=Distance.COSINE
         )
@@ -123,19 +124,18 @@ class RAG:
 
         self.retriever = Retriever(
             vector_store=self.vector_store,
-            embedder=self.embedder,
-            max_pool_size=50
+            embedder=self.embedder
         )
 
 
         self.reranker = Reranker(
-            model_name="BAAI/bge-reranker-v2-m3",
+            model_name=str(reranker_path),
             top_n=5
         )
 
         self.llm = QwenClient(model_path=str(model_path))
 
-        self.prompt_builder = ContractRiskAnalysisPromptBuilder()
+        self.prompt_builder = LaborPromptBuilder()
 
         self.cleaner = ContextCleaner()
 
@@ -149,7 +149,6 @@ class RAG:
             retriever=self.retriever,
             reranker=self.reranker,
             generator=self.generator,
-            max_context_chars=3500,
             min_final_score=0.50
         )
 
@@ -167,6 +166,8 @@ class RAG:
         chunks = self.ingestion.load_chunks()
 
         print(f"Loaded chunks: {len(chunks)}")
+
+        self.retriever.build_sparse_and_graph(chunks)
 
         self.index_if_needed(chunks)
 
@@ -445,72 +446,22 @@ if __name__ == "__main__":
     rag = RAG()
 
     try:
-
         rag.build_and_index()
 
         print("\nIndex ready.\n")
 
+        print("\n" + "#" * 100)
+        print("[RAG EVALUATION START]")
+        print("#" * 100)
 
-        query = (
-            """
-            ДОГОВОР ЦЕЛЕВОГО ФИНАНСИРОВАНИЯ № ЦФ-042/2026
-            г. Москва «25» мая 2026 г.
-            АО «Банк Развития Капитал» в лице Генерального директора Смирнова Андрея Викторовича,
-            действующего на основании Устава, именуемый в дальнейшем «Банк», с одной стороны,
-            и ООО «ТехИнвест Проект» в лице Генерального директора Кузнецова Дмитрия Сергеевича,
-            действующего на основании Устава, именуемое в дальнейшем «Предприятие», с другой стороны,
-            совместно именуемые «Стороны», заключили настоящий Договор о нижеследующем:
-            1. ПРЕДМЕТ ДОГОВОРА
-            1.1. Банк осуществляет целевое финансирование Предприятия для реализации проекта
-            по разработке и внедрению программного комплекса автоматизации кредитного анализа.
-            1.2. Финансирование производится поэтапно с 50 % авансированием затрат.
-            1.3. Общая сумма финансирования составляет 48 000 000 (сорок восемь миллионов) рублей.
-            2. УСЛОВИЯ ФИНАНСИРОВАНИЯ
-            2.1. Начало и окончание каждого этапа оформляются актом за подписью Сторон.
-            2.2. Банк перечисляет аванс на расчетный счет Предприятия
-            № 40702810900000045871 в ПАО «Сбербанк России» после подписания акта
-            о начале рабочего периода.
-            2.3. Банк получает 30 % дохода от реализации проекта.
-            3. ОТВЕТСТВЕННОСТЬ СТОРОН
-            3.1. Банк принимает на себя обязательства по финансированию проекта
-            до 31 декабря 2026 года.
-            3.2. Предприятие обязуется завершить проект до 31 марта 2027 года.
-            3.3. В случае нарушения сроков Предприятие обязуется возвратить Банку
-            сумму финансирования с начислением 5 % годовых.
-            4. СРОК ДЕЙСТВИЯ ДОГОВОРА
-            4.1. Настоящий Договор вступает в силу с момента подписания
-            и действует до полного исполнения обязательств Сторонами.
-            """
+        evaluate_rag(
+            rag,
+            dataset,
+            output_path="rag_eval_results_hybrid_5.json",
+            use_reranker=True,
+            retrieve_top_k=20,
+            rerank_top_n=5
         )
 
-        print("\n" + "=" * 100)
-
-        print("[GENERATOR TEST]")
-
-        print("=" * 100)
-
-        print(f"\nQUERY:\n{query}")
-
-        print("\n" + "=" * 100)
-
-        answer = rag.ask(query)
-
-        print("\nANSWER:\n")
-
-        print(answer)
-
-        print("\n" + "=" * 100)
-        # rag.debug_dense_retrieval(
-        #     query=query,
-        #     top_k=10
-        # )
-
-        # rag.debug_search_pipeline(
-        #     query=query,
-        #     retrieve_top_k=20,
-        #     rerank_top_n=5
-        # )
-
     finally:
-
         rag.close()

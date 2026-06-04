@@ -5,19 +5,21 @@ from backend.modules.rag.generator import ContractRiskAnalysisPromptBuilder, Cre
 from backend.modules.rag.rag_config import RAGResponse
 from backend.modules.rag.search_result_service import SearchResult
 
+
 class RAGMode(str, Enum):
     USER_QUERY = "user_query"
     DOCUMENT_ANALYSIS = "document_analysis"
+
 
 class RAGService:
     """Сервис RAG с разными параметрами для вопроса и анализа документа."""
 
     def __init__(
-        self,
-        retriever,
-        reranker,
-        generator,
-        min_final_score: float = 0.50,
+            self,
+            retriever,
+            reranker,
+            generator,
+            min_final_score: float = 0.50,
     ):
         self.retriever = retriever
         self.reranker = reranker
@@ -25,9 +27,9 @@ class RAGService:
         self.min_final_score = min_final_score
 
     def ask(
-        self,
-        query: str,
-        mode: RAGMode = RAGMode.USER_QUERY,
+            self,
+            query: str,
+            mode: RAGMode = RAGMode.USER_QUERY,
     ) -> RAGResponse:
         settings = self._settings_for_mode(mode)
 
@@ -143,9 +145,9 @@ class RAGService:
         return filtered
 
     def _build_context(
-        self,
-        hits: list[SearchResult],
-        max_context_chars: int,
+            self,
+            hits: list[SearchResult],
+            max_context_chars: int,
     ) -> str:
         parts = []
         size = 0
@@ -170,7 +172,7 @@ class RAGService:
 
             block = f"""[СТАТЬЯ {article} — {source}]
             {header}
-            
+
             {text[:900]}""".strip()
 
             if size + len(block) > max_context_chars:
