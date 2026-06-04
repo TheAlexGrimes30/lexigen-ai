@@ -2,29 +2,116 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional, Set
+from typing import Any, Optional
 import hashlib
 import math
 import re
 
-from rank_bm25 import BM25Okapi
 from llama_index.core import Document
+from rank_bm25 import BM25Okapi
 
 from rag.dense_retriever import Embedder
 from rag.search_result import SearchResult
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class HybridRetrieverConfig:
     """
-    Configuration for Dense + BM25 + GraphRAG hybrid retrieval.
+    Configuration for Dense + BM25 + metadata GraphRAG retrieval.
+
+    Design principle:
+    - dense search is the main semantic signal;
+    - BM25 is a small lexical correction;
+    - graph is not an independent noisy retriever, but a relation expansion
+      mechanism around high-confidence dense/BM25 seed articles.
     """
 
-    alpha: float = 0.8
-    graph_weight: float = 0.1
-    pool_multiplier: int = 8
-    max_pool_size: int = 80
+    alpha: float = 0.9
+    graph_weight: float = 0.03
+    pool_multiplier: int = 6
+    max_pool_size: int = 60
     min_text_len: int = 40
+
+    graph_seed_top_n: int = 5
+    graph_max_related_per_seed: int = 3
+    graph_relation_decay: float = 0.45
+
+    document_id_keys: tuple[str, ...] = (
+        "article_number",
+        "article",
+        "article_id",
+        "norm_id",
+        "document_id",
+        "section_number",
+    )
+
+    header_keys: tuple[str, ...] = (
+        "header",
+        "title",
+        "heading",
+        "name",
+    )
+
+    topic_keys: tuple[str, ...] = (
+        "topics",
+    )
+
+    nested_topic_keys: tuple[str, ...] = (
+        "classic_rag",
+    )
+
+    graph_metadata_key: str = "graph_rag"
+
+    relation_target_keys: tuple[str, ...] = (
+        "target",
+        "to",
+        "article",
+        "article_number",
+        "document_id",
+        "norm_id",
+    )
+
+    relation_type_weights: dict[str, float] | None = None
+
+    enable_content_edges: bool = True
+    enable_topic_edges: bool = True
+    content_reference_weight: float = 0.95
+    shared_topic_weight: float = 0.18
+    max_topic_edges_per_doc: int = 4
+
+    @property
+    def bm25_weight(self) -> float:
+        """
+        BM25 weight derived from alpha for backward compatibility.
+        """
+
+        return 1.0 - self.alpha
+
+    def relation_weight(self, relation_type: str | None) -> float:
+        """
+        Return graph relation weight.
+        """
+
+        default_weights = {
+            "REFERENCES": 0.9,
+            "RELATED": 0.55,
+            "EXPLAINS": 0.75,
+            "APPLIES_TO": 0.8,
+            "PROCEDURE_FOR": 0.85,
+            "CONSEQUENCE_OF": 0.8,
+            "CONTENT_REFERENCE": self.content_reference_weight,
+            "SHARED_TOPIC": self.shared_topic_weight,
+        }
+
+        weights = self.relation_type_weights or default_weights
+
+        if relation_type is None:
+            return 0.5
+
+        return weights.get(
+            str(relation_type).upper().strip(),
+            0.5
+        )
 
 
 class BaseDenseRetriever(ABC):
@@ -57,7 +144,7 @@ class BaseSparseRetriever(ABC):
             k: int
     ) -> list[SearchResult]:
         """
-        Search by text query.
+        Search by lexical query.
         """
 
         raise NotImplementedError
@@ -65,17 +152,17 @@ class BaseSparseRetriever(ABC):
 
 class BaseGraphRetriever(ABC):
     """
-    Abstract interface for GraphRAG retrievers.
+    Abstract interface for graph expansion retrievers.
     """
 
     @abstractmethod
-    def search(
+    def expand(
             self,
-            query: str,
+            seed_doc_ids: list[str],
             k: int
     ) -> list[SearchResult]:
         """
-        Search by graph context.
+        Expand high-confidence seed documents through graph relations.
         """
 
         raise NotImplementedError
@@ -113,7 +200,10 @@ class SearchResultFactory:
             payload: dict[str, Any]
     ) -> SearchResult:
         """
-        Create SearchResult regardless of constructor shape.
+        Create SearchResult.
+
+        The fallback exists only for compatibility with non-dataclass
+        SearchResult implementations.
         """
 
         try:
@@ -132,17 +222,15 @@ class SearchResultFactory:
             return result
 
 
-class ChunkAdapter:
+class MetadataAdapter:
     """
-    Converts project chunks into plain fields and LlamaIndex documents.
+    Domain-neutral metadata adapter for legal corpora.
     """
 
     @staticmethod
-    def metadata_to_dict(
-            metadata: Any
-    ) -> dict[str, Any]:
+    def to_dict(metadata: Any) -> dict[str, Any]:
         """
-        Convert metadata object to dict.
+        Convert metadata object to a plain dict.
         """
 
         if metadata is None:
@@ -167,6 +255,112 @@ class ChunkAdapter:
         return {}
 
     @staticmethod
+    def normalize_id(value: Any) -> Optional[str]:
+        """
+        Normalize legal document id without domain-specific hacks.
+        """
+
+        if value is None:
+            return None
+
+        text = str(value).strip()
+
+        if not text:
+            return None
+
+        if text.endswith(".0"):
+            text = text[:-2]
+
+        return text
+
+    @classmethod
+    def get_document_id(
+            cls,
+            metadata: dict[str, Any],
+            config: HybridRetrieverConfig
+    ) -> Optional[str]:
+        """
+        Get article/norm/document id from configured metadata keys.
+        """
+
+        for key in config.document_id_keys:
+            normalized = cls.normalize_id(
+                metadata.get(key)
+            )
+
+            if normalized is not None:
+                return normalized
+
+        return None
+
+    @classmethod
+    def get_header(
+            cls,
+            metadata: dict[str, Any],
+            config: HybridRetrieverConfig
+    ) -> Optional[str]:
+        """
+        Get header/title from configured metadata keys.
+        """
+
+        for key in config.header_keys:
+            value = metadata.get(key)
+
+            if value is None:
+                continue
+
+            text = str(value).strip()
+
+            if text:
+                return text
+
+        return None
+
+    @classmethod
+    def normalize_payload(
+            cls,
+            payload: dict[str, Any],
+            config: HybridRetrieverConfig
+    ) -> dict[str, Any]:
+        """
+        Normalize generic payload fields used by retrieval and debug output.
+        """
+
+        payload = dict(payload or {})
+
+        doc_id = cls.get_document_id(
+            metadata=payload,
+            config=config
+        )
+
+        if doc_id is not None:
+            payload["retrieval_doc_id"] = doc_id
+
+            # Backward compatibility with existing RAGService/evaluation.
+            if "article_number" not in payload:
+                payload["article_number"] = doc_id
+            else:
+                payload["article_number"] = cls.normalize_id(
+                    payload.get("article_number")
+                ) or doc_id
+
+        header = cls.get_header(
+            metadata=payload,
+            config=config
+        )
+
+        if header is not None:
+            payload["header"] = header
+
+        return payload
+
+
+class ChunkAdapter:
+    """
+    Converts project chunks into plain fields and LlamaIndex documents.
+    """
+
+    @staticmethod
     def extract_text(
             chunk: Any
     ) -> str:
@@ -186,7 +380,8 @@ class ChunkAdapter:
     @classmethod
     def extract_metadata(
             cls,
-            chunk: Any
+            chunk: Any,
+            config: HybridRetrieverConfig
     ) -> dict[str, Any]:
         """
         Extract normalized metadata from chunk.
@@ -198,34 +393,28 @@ class ChunkAdapter:
             or {}
         )
 
-        metadata = cls.metadata_to_dict(metadata_raw)
+        metadata = MetadataAdapter.to_dict(metadata_raw)
 
-        article_number = (
-            metadata.get("article_number")
-            or metadata.get("article")
+        return MetadataAdapter.normalize_payload(
+            payload=metadata,
+            config=config
         )
-
-        if article_number is not None:
-            metadata["article_number"] = str(article_number).strip()
-
-        header = metadata.get("header")
-
-        if header is not None:
-            metadata["header"] = str(header).strip()
-
-        return metadata
 
     @classmethod
     def to_llama_document(
             cls,
-            chunk: Any
+            chunk: Any,
+            config: HybridRetrieverConfig
     ) -> Optional[Document]:
         """
-        Convert chunk to LlamaIndex Document.
+        Convert project chunk to LlamaIndex Document.
         """
 
         text = cls.extract_text(chunk)
-        metadata = cls.extract_metadata(chunk)
+        metadata = cls.extract_metadata(
+            chunk=chunk,
+            config=config
+        )
 
         if not text.strip():
             return None
@@ -238,7 +427,7 @@ class ChunkAdapter:
 
 class TextTokenizer:
     """
-    Simple Russian-friendly tokenizer for BM25.
+    Simple Russian-friendly tokenizer for BM25 and graph topic matching.
     """
 
     TOKEN_PATTERN = re.compile(r"[а-яА-ЯёЁa-zA-Z0-9_.]+")
@@ -265,13 +454,15 @@ class QdrantDenseRetriever(BaseDenseRetriever):
 
     def __init__(
             self,
-            vector_store: Any
+            vector_store: Any,
+            config: HybridRetrieverConfig
     ) -> None:
         """
         Initialize dense retriever.
         """
 
         self.vector_store = vector_store
+        self.config = config
 
     def search(
             self,
@@ -292,18 +483,17 @@ class QdrantDenseRetriever(BaseDenseRetriever):
         for hit in hits:
             result = SearchResult.from_qdrant(hit)
 
-            if result.text and result.text.strip():
-                result.payload = result.payload or {}
-                result.payload["retrieval_source"] = "dense"
+            if not result.text or not result.text.strip():
+                continue
 
-                article_number = result.payload.get("article_number")
+            result.payload = MetadataAdapter.normalize_payload(
+                payload=result.payload or {},
+                config=self.config
+            )
 
-                if article_number is not None:
-                    result.payload["article_number"] = str(
-                        article_number
-                    ).strip()
+            result.payload["retrieval_source"] = "dense"
 
-                results.append(result)
+            results.append(result)
 
         return results
 
@@ -315,12 +505,14 @@ class BM25SparseRetriever(BaseSparseRetriever):
 
     def __init__(
             self,
+            config: HybridRetrieverConfig,
             chunks: Optional[list[Any]] = None
     ) -> None:
         """
         Initialize BM25 retriever.
         """
 
+        self.config = config
         self.documents: list[Document] = []
         self.tokenized_corpus: list[list[str]] = []
         self.bm25: Optional[BM25Okapi] = None
@@ -339,7 +531,10 @@ class BM25SparseRetriever(BaseSparseRetriever):
         documents: list[Document] = []
 
         for chunk in chunks:
-            document = ChunkAdapter.to_llama_document(chunk)
+            document = ChunkAdapter.to_llama_document(
+                chunk=chunk,
+                config=self.config
+            )
 
             if document is not None:
                 documents.append(document)
@@ -351,10 +546,11 @@ class BM25SparseRetriever(BaseSparseRetriever):
             for document in documents
         ]
 
-        if self.tokenized_corpus:
-            self.bm25 = BM25Okapi(self.tokenized_corpus)
-        else:
-            self.bm25 = None
+        self.bm25 = (
+            BM25Okapi(self.tokenized_corpus)
+            if self.tokenized_corpus
+            else None
+        )
 
     def search(
             self,
@@ -390,46 +586,53 @@ class BM25SparseRetriever(BaseSparseRetriever):
                 continue
 
             document = self.documents[index]
-            payload = dict(document.metadata or {})
-            payload["retrieval_source"] = "bm25"
 
-            article_number = payload.get("article_number")
-
-            if article_number is not None:
-                payload["article_number"] = str(article_number).strip()
-
-            result = SearchResultFactory.create(
-                id=f"bm25:{index}",
-                text=document.text,
-                score=score,
-                payload=payload
+            payload = MetadataAdapter.normalize_payload(
+                payload=dict(document.metadata or {}),
+                config=self.config
             )
 
-            results.append(result)
+            payload["retrieval_source"] = "bm25"
+
+            results.append(
+                SearchResultFactory.create(
+                    id=f"bm25:{index}",
+                    text=document.text,
+                    score=score,
+                    payload=payload
+                )
+            )
 
         return results
 
 
 class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
     """
-    Lightweight GraphRAG retriever based on LlamaIndex Documents metadata.
+    Metadata GraphRAG retriever.
 
     It does not call OpenAI and does not build PropertyGraphIndex.
-    It uses graph_rag metadata, article links, topics and relation targets.
+    Instead, it uses legal metadata relations as a graph expansion layer.
+
+    Important:
+    graph expansion is triggered from high-confidence dense/BM25 seed
+    documents. This prevents noisy topic-only graph results from pushing
+    relevant dense results down.
     """
 
     def __init__(
             self,
+            config: HybridRetrieverConfig,
             chunks: Optional[list[Any]] = None
     ) -> None:
         """
-        Initialize metadata graph retriever.
+        Initialize graph retriever.
         """
 
+        self.config = config
         self.documents: list[Document] = []
-        self.article_to_docs: dict[str, list[int]] = {}
-        self.topic_to_articles: dict[str, set[str]] = {}
-        self.article_graph: dict[str, set[str]] = {}
+        self.doc_id_to_docs: dict[str, list[int]] = {}
+        self.doc_graph: dict[str, list[tuple[str, float, str | None]]] = {}
+        self.topic_to_doc_ids: dict[str, set[str]] = {}
 
         if chunks:
             self.build(chunks)
@@ -443,12 +646,15 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
         """
 
         self.documents = []
-        self.article_to_docs = {}
-        self.topic_to_articles = {}
-        self.article_graph = {}
+        self.doc_id_to_docs = {}
+        self.doc_graph = {}
+        self.topic_to_doc_ids = {}
 
         for chunk in chunks:
-            document = ChunkAdapter.to_llama_document(chunk)
+            document = ChunkAdapter.to_llama_document(
+                chunk=chunk,
+                config=self.config
+            )
 
             if document is None:
                 continue
@@ -458,73 +664,92 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
 
             metadata = document.metadata or {}
 
-            article = metadata.get("article_number")
+            doc_id = MetadataAdapter.get_document_id(
+                metadata=metadata,
+                config=self.config
+            )
 
-            if article is None:
+            if doc_id is None:
                 continue
 
-            article = str(article).strip()
-
-            self.article_to_docs.setdefault(article, []).append(index)
-            self.article_graph.setdefault(article, set())
+            self.doc_id_to_docs.setdefault(doc_id, []).append(index)
+            self.doc_graph.setdefault(doc_id, [])
 
             self._index_topics(
-                article=article,
+                doc_id=doc_id,
                 metadata=metadata
             )
 
             self._index_relations(
-                article=article,
+                doc_id=doc_id,
                 metadata=metadata
             )
+
+            if self.config.enable_content_edges:
+                self._index_content_references(
+                    doc_id=doc_id,
+                    text=document.text
+                )
+
+        if self.config.enable_topic_edges:
+            self._build_shared_topic_edges()
 
     def _index_topics(
             self,
             *,
-            article: str,
+            doc_id: str,
             metadata: dict[str, Any]
     ) -> None:
         """
-        Index classic_rag topics as graph concepts.
+        Index topics for debug and optional future routing.
         """
 
-        classic_rag = metadata.get("classic_rag")
+        topics: list[Any] = []
 
-        topics = []
+        for key in self.config.topic_keys:
+            direct_topics = metadata.get(key)
 
-        if isinstance(classic_rag, dict):
-            topics = classic_rag.get("topics") or []
+            if isinstance(direct_topics, list):
+                topics.extend(direct_topics)
 
-        direct_topics = metadata.get("topics") or []
+        for key in self.config.nested_topic_keys:
+            nested = metadata.get(key)
 
-        if isinstance(direct_topics, list):
-            topics.extend(direct_topics)
+            if not isinstance(nested, dict):
+                continue
+
+            nested_topics = nested.get("topics") or []
+
+            if isinstance(nested_topics, list):
+                topics.extend(nested_topics)
 
         for topic in topics:
             topic_key = str(topic).lower().strip()
 
             if topic_key:
-                self.topic_to_articles.setdefault(
+                self.topic_to_doc_ids.setdefault(
                     topic_key,
                     set()
-                ).add(article)
+                ).add(doc_id)
 
     def _index_relations(
             self,
             *,
-            article: str,
+            doc_id: str,
             metadata: dict[str, Any]
     ) -> None:
         """
         Index graph_rag relations.
         """
 
-        graph_rag = metadata.get("graph_rag")
+        graph_metadata = metadata.get(
+            self.config.graph_metadata_key
+        )
 
-        if not isinstance(graph_rag, dict):
+        if not isinstance(graph_metadata, dict):
             return
 
-        relations = graph_rag.get("relations") or []
+        relations = graph_metadata.get("relations") or []
 
         if not isinstance(relations, list):
             return
@@ -533,36 +758,198 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
             if not isinstance(relation, dict):
                 continue
 
-            target = relation.get("target")
+            target_doc_id = self._extract_relation_target(relation)
 
-            if target is None:
+            if target_doc_id is None:
                 continue
 
-            target_text = str(target).strip()
+            relation_type = relation.get("type")
+            relation_weight = self.config.relation_weight(relation_type)
 
-            if not target_text:
+            self._add_edge(
+                source_doc_id=doc_id,
+                target_doc_id=target_doc_id,
+                weight=relation_weight,
+                relation_type=str(relation_type) if relation_type else None
+            )
+
+
+    def _index_content_references(
+            self,
+            *,
+            doc_id: str,
+            text: str
+    ) -> None:
+        """
+        Index explicit references found directly in article text.
+
+        Examples:
+        - "ст. 393 ГК РФ"
+        - "статья 438"
+        - "пункт 2 статьи 307.1"
+
+        These edges are content-based and usually more reliable than
+        topic similarity, because the norm explicitly refers to another norm.
+        """
+
+        for target_doc_id in self._extract_article_references(text):
+            if target_doc_id == doc_id:
                 continue
 
-            target_article = self._extract_article_number(target_text)
+            self._add_edge(
+                source_doc_id=doc_id,
+                target_doc_id=target_doc_id,
+                weight=self.config.content_reference_weight,
+                relation_type="CONTENT_REFERENCE"
+            )
 
-            if target_article:
-                self.article_graph.setdefault(
-                    article,
-                    set()
-                ).add(target_article)
+    def _build_shared_topic_edges(self) -> None:
+        """
+        Build weak graph edges between documents sharing configured topics.
+
+        These edges are intentionally low-weight to avoid old GraphRAG noise.
+        They help graph expansion only when dense/BM25 already selected a
+        related seed document.
+        """
+
+        for topic, doc_ids in self.topic_to_doc_ids.items():
+            ordered_doc_ids = sorted(doc_ids)
+
+            for source_doc_id in ordered_doc_ids:
+                added = 0
+
+                for target_doc_id in ordered_doc_ids:
+                    if source_doc_id == target_doc_id:
+                        continue
+
+                    self._add_edge(
+                        source_doc_id=source_doc_id,
+                        target_doc_id=target_doc_id,
+                        weight=self.config.shared_topic_weight,
+                        relation_type="SHARED_TOPIC"
+                    )
+
+                    added += 1
+
+                    if added >= self.config.max_topic_edges_per_doc:
+                        break
+
+    def _add_edge(
+            self,
+            *,
+            source_doc_id: str,
+            target_doc_id: str,
+            weight: float,
+            relation_type: str | None
+    ) -> None:
+        """
+        Add graph edge and keep only the strongest duplicate edge.
+
+        The graph is stored as an adjacency list:
+            source_doc_id -> [(target_doc_id, weight, relation_type)]
+        """
+
+        if not source_doc_id or not target_doc_id:
+            return
+
+        edges = self.doc_graph.setdefault(source_doc_id, [])
+
+        for index, (existing_target, existing_weight, existing_type) in enumerate(edges):
+            if existing_target != target_doc_id:
+                continue
+
+            if weight > existing_weight:
+                edges[index] = (
+                    target_doc_id,
+                    weight,
+                    relation_type
+                )
+
+            return
+
+        edges.append(
+            (
+                target_doc_id,
+                weight,
+                relation_type
+            )
+        )
 
     @staticmethod
-    def _extract_article_number(
-            value: str
+    def _extract_article_references(
+            text: str
+    ) -> list[str]:
+        """
+        Extract referenced article ids from legal text.
+        """
+
+        if not text:
+            return []
+
+        patterns = (
+            r"\bст\.?\s*(\d+(?:\.\d+)?)",
+            r"\bстать[ьяеию]+\s*(\d+(?:\.\d+)?)",
+            r"\barticle[_\s-]*(\d+)(?:[_\.-](\d+))?",
+        )
+
+        references: list[str] = []
+        seen: set[str] = set()
+
+        for pattern in patterns:
+            for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+                if len(match.groups()) >= 2 and match.group(2):
+                    value = f"{match.group(1)}.{match.group(2)}"
+                else:
+                    value = match.group(1)
+
+                value = value.strip()
+
+                if value and value not in seen:
+                    seen.add(value)
+                    references.append(value)
+
+        return references
+
+    def _extract_relation_target(
+            self,
+            relation: dict[str, Any]
     ) -> Optional[str]:
         """
-        Extract article number from ids like tk_rf_article_133_1.
+        Extract relation target document id.
         """
 
-        match = re.search(r"article_(\d+)(?:_(\d+))?$", value)
+        for key in self.config.relation_target_keys:
+            value = relation.get(key)
+            normalized = MetadataAdapter.normalize_id(value)
+
+            if normalized is None:
+                continue
+
+            return self._extract_document_id_from_text(normalized)
+
+        return None
+
+    @staticmethod
+    def _extract_document_id_from_text(
+            value: str
+    ) -> str:
+        """
+        Extract generic legal document id from common identifiers.
+
+        Examples:
+        - gc_rf_article_307 -> 307
+        - article_307_1 -> 307.1
+        - norm_10 -> 10
+        """
+
+        match = re.search(
+            r"(?:article|norm|document|doc)[_\s-]*(\d+)(?:[_\.-](\d+))?",
+            value,
+            flags=re.IGNORECASE
+        )
 
         if not match:
-            return None
+            return value
 
         first = match.group(1)
         second = match.group(2)
@@ -572,13 +959,91 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
 
         return first
 
+    def expand(
+            self,
+            seed_doc_ids: list[str],
+            k: int
+    ) -> list[SearchResult]:
+        """
+        Expand from high-confidence seed articles through graph relations.
+        """
+
+        if not self.documents:
+            return []
+
+        results: list[SearchResult] = []
+        seen_result_keys: set[str] = set()
+
+        seed_doc_ids = [
+            doc_id for doc_id in seed_doc_ids
+            if doc_id in self.doc_graph
+        ][:self.config.graph_seed_top_n]
+
+        for seed_rank, seed_doc_id in enumerate(seed_doc_ids, start=1):
+            seed_base_score = 1.0 / seed_rank
+
+            related = [
+                edge for edge in sorted(
+                    self.doc_graph.get(seed_doc_id, []),
+                    key=lambda item: item[1],
+                    reverse=True
+                )
+                if edge[0] in self.doc_id_to_docs
+            ][:self.config.graph_max_related_per_seed]
+
+            for target_doc_id, relation_weight, relation_type in related:
+                doc_indexes = self.doc_id_to_docs.get(target_doc_id, [])
+
+                graph_score = (
+                    seed_base_score
+                    * relation_weight
+                    * self.config.graph_relation_decay
+                )
+
+                for doc_index in doc_indexes:
+                    document = self.documents[doc_index]
+
+                    key = f"{target_doc_id}:{doc_index}"
+
+                    if key in seen_result_keys:
+                        continue
+
+                    seen_result_keys.add(key)
+
+                    payload = MetadataAdapter.normalize_payload(
+                        payload=dict(document.metadata or {}),
+                        config=self.config
+                    )
+
+                    payload["retrieval_source"] = "graph"
+                    payload["graph_seed_doc_id"] = seed_doc_id
+                    payload["graph_relation_type"] = relation_type
+
+                    results.append(
+                        SearchResultFactory.create(
+                            id=f"graph:{seed_doc_id}->{target_doc_id}:{doc_index}",
+                            text=document.text,
+                            score=graph_score,
+                            payload=payload
+                        )
+                    )
+
+                    if len(results) >= k:
+                        return results
+
+        return results
+
     def search(
             self,
             query: str,
             k: int
     ) -> list[SearchResult]:
         """
-        Search graph by query concepts and related articles.
+        Backward-compatible graph search.
+
+        It is intentionally conservative. Direct topic search is weaker than
+        relation expansion from dense/BM25 seeds, so this method should not be
+        used as the main graph path.
         """
 
         if not self.documents:
@@ -588,67 +1053,36 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
             TextTokenizer.tokenize(query)
         )
 
-        article_scores: dict[str, float] = {}
+        doc_scores: dict[str, float] = {}
 
-        for topic, articles in self.topic_to_articles.items():
+        for topic, doc_ids in self.topic_to_doc_ids.items():
             topic_tokens = set(
                 TextTokenizer.tokenize(topic)
             )
-
-            if not topic_tokens:
-                continue
 
             overlap = len(query_tokens & topic_tokens)
 
             if overlap <= 0:
                 continue
 
-            for article in articles:
-                article_scores[article] = (
-                    article_scores.get(article, 0.0)
+            for doc_id in doc_ids:
+                doc_scores[doc_id] = (
+                    doc_scores.get(doc_id, 0.0)
                     + overlap
                 )
 
-        for article in list(article_scores.keys()):
-            related_articles = self.article_graph.get(article, set())
-
-            for related in related_articles:
-                article_scores[related] = (
-                    article_scores.get(related, 0.0)
-                    + article_scores[article] * 0.5
-                )
-
-        ranked_articles = sorted(
-            article_scores.items(),
+        ranked_doc_ids = sorted(
+            doc_scores.items(),
             key=lambda item: item[1],
             reverse=True
         )
 
-        results: list[SearchResult] = []
-
-        for article, article_score in ranked_articles:
-            doc_indexes = self.article_to_docs.get(article, [])
-
-            for doc_index in doc_indexes:
-                document = self.documents[doc_index]
-
-                payload = dict(document.metadata or {})
-                payload["article_number"] = str(article)
-                payload["retrieval_source"] = "graph"
-
-                results.append(
-                    SearchResultFactory.create(
-                        id=f"graph:{article}:{doc_index}",
-                        text=document.text,
-                        score=float(article_score),
-                        payload=payload
-                    )
-                )
-
-                if len(results) >= k:
-                    return results
-
-        return results
+        return self.expand(
+            seed_doc_ids=[
+                doc_id for doc_id, _ in ranked_doc_ids
+            ],
+            k=k
+        )
 
 
 class AlphaFusionService:
@@ -656,10 +1090,13 @@ class AlphaFusionService:
     Alpha fusion for dense, BM25 and graph results.
 
     Formula:
-        final_score =
-            alpha * dense_score
-            + (1 - alpha) * bm25_score
-            + graph_weight * graph_score
+        score =
+            alpha * dense_rank_score
+            + (1 - alpha) * bm25_rank_score
+            + graph_weight * graph_rank_score
+
+    Rank-normalization is used instead of min-max normalization to avoid
+    giving too much power to noisy graph/BM25 results.
     """
 
     def __init__(
@@ -684,9 +1121,9 @@ class AlphaFusionService:
         Fuse retrieval results.
         """
 
-        dense_results = self._normalize_scores(dense_results)
-        bm25_results = self._normalize_scores(bm25_results)
-        graph_results = self._normalize_scores(graph_results)
+        dense_results = self._rank_normalize(dense_results)
+        bm25_results = self._rank_normalize(bm25_results)
+        graph_results = self._rank_normalize(graph_results)
 
         merged: dict[str, SearchResult] = {}
         scores: dict[str, float] = {}
@@ -703,7 +1140,7 @@ class AlphaFusionService:
             merged=merged,
             scores=scores,
             results=bm25_results,
-            weight=1.0 - self.config.alpha,
+            weight=self.config.bm25_weight,
             source="bm25"
         )
 
@@ -730,6 +1167,25 @@ class AlphaFusionService:
 
         return filtered[:top_k]
 
+    @staticmethod
+    def _rank_normalize(
+            results: list[SearchResult]
+    ) -> list[SearchResult]:
+        """
+        Convert ranking position to stable 0..1 score.
+
+        This is safer than min-max normalization for BM25/graph because their
+        raw scales vary strongly between queries.
+        """
+
+        if not results:
+            return []
+
+        for rank, result in enumerate(results, start=1):
+            result.score = 1.0 / rank
+
+        return results
+
     def _add_results(
             self,
             *,
@@ -755,50 +1211,15 @@ class AlphaFusionService:
                 payload["retrieval_sources"] = [source]
                 merged[key].payload = payload
 
-            else:
-                scores[key] += weighted_score
+                continue
 
-                merged[key].payload = self._merge_payloads(
-                    merged[key].payload or {},
-                    result.payload or {},
-                    source
-                )
+            scores[key] += weighted_score
 
-    def _normalize_scores(
-            self,
-            results: list[SearchResult]
-    ) -> list[SearchResult]:
-        """
-        Normalize scores to 0..1.
-        """
-
-        if not results:
-            return []
-
-        raw_scores = [
-            float(result.score or 0.0)
-            for result in results
-        ]
-
-        min_score = min(raw_scores)
-        max_score = max(raw_scores)
-
-        if math.isclose(max_score, min_score):
-            for result in results:
-                result.score = 1.0
-
-            return results
-
-        for result in results:
-            result.score = (
-                float(result.score or 0.0)
-                - min_score
-            ) / (
-                max_score
-                - min_score
+            merged[key].payload = self._merge_payloads(
+                merged[key].payload or {},
+                result.payload or {},
+                source
             )
-
-        return results
 
     def _basic_filter(
             self,
@@ -808,7 +1229,7 @@ class AlphaFusionService:
         Remove empty, short and duplicate results.
         """
 
-        seen: Set[str] = set()
+        seen: set[str] = set()
         result: list[SearchResult] = []
 
         for hit in hits:
@@ -837,11 +1258,15 @@ class AlphaFusionService:
 
         payload = result.payload or {}
 
-        article = payload.get("article_number")
+        doc_id = (
+            payload.get("retrieval_doc_id")
+            or payload.get("article_number")
+        )
+
         header = payload.get("header")
 
-        if article and header:
-            return f"article:{article}|header:{header}"
+        if doc_id and header:
+            return f"doc:{doc_id}|header:{header}"
 
         if getattr(result, "id", None):
             return str(result.id)
@@ -849,7 +1274,7 @@ class AlphaFusionService:
         text = (getattr(result, "text", "") or "")[:500]
 
         return hashlib.md5(
-            text.encode()
+            text.encode("utf-8")
         ).hexdigest()
 
     @staticmethod
@@ -859,7 +1284,7 @@ class AlphaFusionService:
             source: str
     ) -> dict[str, Any]:
         """
-        Merge payloads.
+        Merge payloads from duplicate results.
         """
 
         merged = dict(left)
@@ -886,7 +1311,7 @@ class Retriever(BaseRetriever):
     Hybrid Retriever:
     - Dense Qdrant
     - BM25 sparse
-    - metadata GraphRAG via LlamaIndex Documents
+    - metadata GraphRAG relation expansion
     - AlphaFusion
     """
 
@@ -906,9 +1331,21 @@ class Retriever(BaseRetriever):
         self.embedder = embedder
         self.config = config or HybridRetrieverConfig()
 
-        self.dense = QdrantDenseRetriever(vector_store)
-        self.bm25 = BM25SparseRetriever(chunks)
-        self.graph = LlamaIndexMetadataGraphRetriever(chunks)
+        self.dense = QdrantDenseRetriever(
+            vector_store=vector_store,
+            config=self.config
+        )
+
+        self.bm25 = BM25SparseRetriever(
+            config=self.config,
+            chunks=chunks
+        )
+
+        self.graph = LlamaIndexMetadataGraphRetriever(
+            config=self.config,
+            chunks=chunks
+        )
+
         self.fusion = AlphaFusionService(self.config)
 
     def build_sparse_and_graph(
@@ -928,7 +1365,7 @@ class Retriever(BaseRetriever):
             top_k: int = 10
     ) -> list[SearchResult]:
         """
-        Retrieve using Dense + BM25 + GraphRAG.
+        Retrieve using Dense + BM25 + graph expansion.
         """
 
         query = (query or "").strip()
@@ -958,8 +1395,13 @@ class Retriever(BaseRetriever):
             k=pool_size
         )
 
-        graph_candidates = self.graph.search(
-            query=query,
+        seed_doc_ids = self._select_graph_seed_doc_ids(
+            dense_candidates=dense_candidates,
+            bm25_candidates=bm25_candidates
+        )
+
+        graph_candidates = self.graph.expand(
+            seed_doc_ids=seed_doc_ids,
             k=pool_size
         )
 
@@ -969,6 +1411,42 @@ class Retriever(BaseRetriever):
             graph_results=graph_candidates,
             top_k=top_k
         )
+
+    def _select_graph_seed_doc_ids(
+            self,
+            *,
+            dense_candidates: list[SearchResult],
+            bm25_candidates: list[SearchResult]
+    ) -> list[str]:
+        """
+        Select graph expansion seeds from high-confidence dense/BM25 candidates.
+        """
+
+        candidates = dense_candidates[:self.config.graph_seed_top_n]
+
+        # Add a small number of lexical seeds to catch exact legal terms.
+        candidates += bm25_candidates[:max(2, self.config.graph_seed_top_n // 2)]
+
+        seed_doc_ids: list[str] = []
+        seen: set[str] = set()
+
+        for candidate in candidates:
+            payload = candidate.payload or {}
+
+            doc_id = (
+                payload.get("retrieval_doc_id")
+                or payload.get("article_number")
+            )
+
+            doc_id = MetadataAdapter.normalize_id(doc_id)
+
+            if doc_id is None or doc_id in seen:
+                continue
+
+            seen.add(doc_id)
+            seed_doc_ids.append(doc_id)
+
+        return seed_doc_ids
 
     def debug_query(
             self,
@@ -980,7 +1458,7 @@ class Retriever(BaseRetriever):
         """
 
         print("\n" + "=" * 100)
-        print("[HYBRID RETRIEVAL DEBUG: DENSE + BM25 + GRAPH]")
+        print("[HYBRID RETRIEVAL DEBUG: DENSE + BM25 + GRAPH EXPANSION]")
         print(f"QUERY: {query}")
         print("=" * 100)
 
@@ -1000,8 +1478,11 @@ class Retriever(BaseRetriever):
             print(f"TOP {index}")
             print(f"SCORE   : {hit.score:.4f}")
             print(f"SOURCES : {payload.get('retrieval_sources')}")
+            print(f"DOC ID  : {payload.get('retrieval_doc_id')}")
             print(f"ARTICLE : {payload.get('article_number', 'unknown')}")
             print(f"HEADER  : {payload.get('header', 'unknown')}")
+            print(f"GRAPH SEED: {payload.get('graph_seed_doc_id')}")
+            print(f"GRAPH REL : {payload.get('graph_relation_type')}")
             print(f"ID      : {hit.id}")
             print("\nTEXT:\n")
             print((hit.text or "")[:1200])

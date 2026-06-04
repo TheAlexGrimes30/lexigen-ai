@@ -7,7 +7,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance
 
 from rag.dense_retriever import (
-    Embedder, Retriever
+    Embedder
 )
 
 from rag.generator import (
@@ -16,6 +16,7 @@ from rag.generator import (
     LaborPromptBuilder,
     QwenClient
 )
+from rag.hybrid_retriever import Retriever
 
 from rag.rag_service import (
     RAGService
@@ -456,7 +457,7 @@ if __name__ == "__main__":
         evaluate_rag(
             rag,
             dataset,
-            output_path="rag_eval_results_dense.json",
+            output_path="rag_eval_results_hybrid_2.json",
             use_reranker=True,
             retrieve_top_k=20,
             rerank_top_n=5
