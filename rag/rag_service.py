@@ -12,7 +12,7 @@ class RAGService:
             retriever,
             reranker,
             generator,
-            max_context_chars: int = 1200,
+            max_context_chars: int = 3500,
             min_final_score: float = 0.50
     ):
         self.retriever = retriever
@@ -24,8 +24,8 @@ class RAGService:
 
     def ask(self, query: str) -> RAGResponse:
 
-        hits = self.retriever.retrieve(query=query, top_k=8)
-        reranked = hits[:4]
+        hits = self.retriever.retrieve(query=query, top_k=25)
+        reranked = self.reranker.rerank(query=query, hits=hits, top_n=10)
 
         filtered = self._filter_hits(reranked)
 
@@ -57,7 +57,6 @@ class RAGService:
             sources=sources
         )
 
-
     def _sanitize_context(self, text: str) -> str:
         text = re.sub(r"(?i)\b(a:|q:)\b", "", text)
         text = re.sub(r"\bНедостаточно данных\b.*", "", text, flags=re.IGNORECASE)
@@ -67,7 +66,6 @@ class RAGService:
 
     def _normalize(self, text: str) -> str:
         return re.sub(r"\s+", " ", text.lower()).strip()
-
 
     def _filter_hits(self, hits: List[SearchResult]) -> List[SearchResult]:
 
@@ -122,7 +120,7 @@ class RAGService:
 
             block = f"""[СТАТЬЯ {article} — {source}]
             {header}
-            
+
             {text[:900]}""".strip()
 
             if size + len(block) > self.max_context_chars:
@@ -151,7 +149,6 @@ class RAGService:
             )
 
         return "\n\n".join(parts)
-
 
     def _validate_and_fix(self, text: str, hits: List[SearchResult]) -> str:
 
@@ -185,7 +182,7 @@ class RAGService:
         bullets = re.findall(r"(?:^|\n)-\s+(.*)", text)
         if bullets:
             return "Норма права устанавливает " + \
-                   ", ".join(b.strip(" .") for b in bullets)
+                ", ".join(b.strip(" .") for b in bullets)
 
         text = re.sub(r"\s+", " ", text).strip()
 

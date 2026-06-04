@@ -4,13 +4,13 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance
 
 from backend.modules.rag.chuncking import HybridLegalChunker
-from backend.modules.rag.retriever_services.dense_retriever_service import Retriever
 from backend.modules.rag.generator import ContextCleaner, CreditPromptBuilder, QwenClient, Generator
 from backend.modules.rag.index_service import IndexService
 from backend.modules.rag.ingestion_service import MarkdownDocumentLoader, IngestionPipeline, IngestionService
 from backend.modules.rag.rag_embedder import Embedder
 from backend.modules.rag.rag_service import RAGService, RAGMode
 from backend.modules.rag.reranker_service import Reranker
+from backend.modules.rag.retriever_service import Retriever
 from backend.modules.rag.search_result_service import SearchResult
 from backend.modules.rag.storage import VectorStore
 
@@ -71,7 +71,6 @@ class RAG:
         self.retriever = Retriever(
             vector_store=self.vector_store,
             embedder=self.embedder,
-            max_pool_size=50,
         )
 
         self.reranker = Reranker(
