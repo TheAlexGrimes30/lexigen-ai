@@ -452,27 +452,18 @@ if __name__ == "__main__":
 
         print("\nIndex ready.\n")
 
-        query = (
-        "Риски если брать кредит на малый бизнес. Распиши все возможные риски для начинающего предпринимателя"
+        print("\n" + "#" * 100)
+        print("[RAG EVALUATION START]")
+        print("#" * 100)
+
+        evaluate_rag(
+            rag,
+            dataset,
+            output_path="rag_eval_results_hybrid_4.json",
+            use_reranker=True,
+            retrieve_top_k=20,
+            rerank_top_n=5
         )
-
-        print("\n" + "=" * 100)
-
-        print("[GENERATOR TEST]")
-
-        print("=" * 100)
-
-        print(f"\nQUERY:\n{query}")
-
-        print("\n" + "=" * 100)
-
-        answer = rag.ask(query)
-
-        print("\nANSWER:\n")
-
-        print(answer)
-
-        print("\n" + "=" * 100)
 
     finally:
         rag.close()

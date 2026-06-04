@@ -16,7 +16,13 @@ from rag.search_result import SearchResult
 @dataclass(frozen=True, slots=True)
 class HybridRetrieverConfig:
     """
-    Configuration for Dense + BM25 + metadata/context GraphRAG retrieval.
+    Configuration for Dense + BM25 + metadata/context/semantic GraphRAG retrieval.
+
+    Design principle:
+    - dense search remains the main semantic signal;
+    - BM25 is a small lexical correction;
+    - graph expansion is triggered only from high-confidence dense/BM25 seeds;
+    - metadata and semantic triples are weak boosts, not independent noisy retrievers.
     """
 
     alpha: float = 0.88
@@ -68,32 +74,34 @@ class HybridRetrieverConfig:
     enable_topic_edges: bool = True
     enable_tree_edges: bool = True
     enable_related_article_edges: bool = True
+    enable_semantic_triple_edges: bool = True
 
     content_reference_weight: float = 0.95
     tree_edge_weight: float = 0.65
     related_article_weight: float = 0.75
+    semantic_triple_weight: float = 0.70
     shared_topic_weight: float = 0.08
     shared_keyword_weight: float = 0.12
+    shared_triple_concept_weight: float = 0.10
     max_topic_edges_per_doc: int = 2
+    max_triple_edges_per_doc: int = 2
+    max_semantic_triples_per_doc: int = 12
 
-    metadata_header_weight: float = 0.35
-    metadata_topic_weight: float = 0.25
-    metadata_keyword_weight: float = 0.25
-    metadata_domain_weight: float = 0.10
-    metadata_related_weight: float = 0.05
+    metadata_header_weight: float = 0.30
+    metadata_topic_weight: float = 0.20
+    metadata_keyword_weight: float = 0.20
+    metadata_domain_weight: float = 0.08
+    metadata_related_weight: float = 0.04
+    metadata_triple_weight: float = 0.18
 
     @property
     def bm25_weight(self) -> float:
-        """
-        BM25 weight derived from alpha for backward compatibility.
-        """
+        """BM25 weight derived from alpha for backward compatibility."""
 
         return 1.0 - self.alpha
 
     def relation_weight(self, relation_type: str | None) -> float:
-        """
-        Return graph relation weight.
-        """
+        """Return graph relation weight."""
 
         default_weights = {
             "REFERENCES": 0.9,
@@ -105,8 +113,10 @@ class HybridRetrieverConfig:
             "CONTENT_REFERENCE": self.content_reference_weight,
             "TREE": self.tree_edge_weight,
             "RELATED_ARTICLE": self.related_article_weight,
+            "SEMANTIC_TRIPLE": self.semantic_triple_weight,
             "SHARED_TOPIC": self.shared_topic_weight,
             "SHARED_KEYWORD": self.shared_keyword_weight,
+            "SHARED_TRIPLE_CONCEPT": self.shared_triple_concept_weight,
         }
 
         weights = self.relation_type_weights or default_weights
@@ -118,65 +128,47 @@ class HybridRetrieverConfig:
 
 
 class BaseDenseRetriever(ABC):
-    """
-    Abstract interface for dense retrievers.
-    """
+    """Abstract interface for dense retrievers."""
 
     @abstractmethod
     def search(self, query_vec: list[float], k: int) -> list[SearchResult]:
-        """
-        Search by dense vector.
-        """
+        """Search by dense vector."""
 
         raise NotImplementedError
 
 
 class BaseSparseRetriever(ABC):
-    """
-    Abstract interface for sparse retrievers.
-    """
+    """Abstract interface for sparse retrievers."""
 
     @abstractmethod
     def search(self, query: str, k: int) -> list[SearchResult]:
-        """
-        Search by lexical query.
-        """
+        """Search by lexical query."""
 
         raise NotImplementedError
 
 
 class BaseGraphRetriever(ABC):
-    """
-    Abstract interface for graph expansion retrievers.
-    """
+    """Abstract interface for graph expansion retrievers."""
 
     @abstractmethod
     def expand(self, seed_doc_ids: list[str], k: int) -> list[SearchResult]:
-        """
-        Expand high-confidence seed documents through graph relations.
-        """
+        """Expand high-confidence seed documents through graph relations."""
 
         raise NotImplementedError
 
 
 class BaseRetriever(ABC):
-    """
-    Abstract application retriever.
-    """
+    """Abstract application retriever."""
 
     @abstractmethod
     def retrieve(self, query: str, top_k: int = 10) -> list[SearchResult]:
-        """
-        Retrieve relevant chunks.
-        """
+        """Retrieve relevant chunks."""
 
         raise NotImplementedError
 
 
 class SearchResultFactory:
-    """
-    Factory for SearchResult objects.
-    """
+    """Factory for SearchResult objects."""
 
     @staticmethod
     def create(
@@ -186,9 +178,7 @@ class SearchResultFactory:
         score: float,
         payload: dict[str, Any],
     ) -> SearchResult:
-        """
-        Create SearchResult with fallback for older constructors.
-        """
+        """Create SearchResult with fallback for older constructors."""
 
         try:
             return SearchResult(id=id, text=text, score=score, payload=payload)
@@ -202,15 +192,11 @@ class SearchResultFactory:
 
 
 class MetadataAdapter:
-    """
-    Domain-neutral metadata adapter for legal corpora.
-    """
+    """Domain-neutral metadata adapter for legal corpora."""
 
     @staticmethod
     def to_dict(metadata: Any) -> dict[str, Any]:
-        """
-        Convert metadata object to a plain dict.
-        """
+        """Convert metadata object to a plain dict."""
 
         if metadata is None:
             return {}
@@ -221,14 +207,12 @@ class MetadataAdapter:
         if hasattr(metadata, "dict"):
             return dict(metadata.dict())
         if hasattr(metadata, "__dict__"):
-            return {k: v for k, v in metadata.__dict__.items() if not k.startswith("_")}
+            return {key: value for key, value in metadata.__dict__.items() if not key.startswith("_")}
         return {}
 
     @staticmethod
     def normalize_id(value: Any) -> Optional[str]:
-        """
-        Normalize legal document id.
-        """
+        """Normalize legal document id."""
 
         if value is None:
             return None
@@ -244,9 +228,7 @@ class MetadataAdapter:
 
     @staticmethod
     def as_list(value: Any) -> list[str]:
-        """
-        Convert scalar/list metadata values to list[str].
-        """
+        """Convert scalar/list metadata values to list[str]."""
 
         if value is None:
             return []
@@ -260,9 +242,7 @@ class MetadataAdapter:
 
     @staticmethod
     def extract_document_id_from_text(value: str) -> str:
-        """
-        Extract generic legal document id from common identifiers.
-        """
+        """Extract generic legal document id from common identifiers."""
 
         match = re.search(
             r"(?:article|norm|document|doc)[_\s-]*(\d+)(?:[_\.-](\d+))?",
@@ -280,9 +260,7 @@ class MetadataAdapter:
 
     @classmethod
     def get_document_id(cls, metadata: dict[str, Any], config: HybridRetrieverConfig) -> Optional[str]:
-        """
-        Get article/norm/document id from configured metadata keys.
-        """
+        """Get article/norm/document id from configured metadata keys."""
 
         for key in config.document_id_keys:
             normalized = cls.normalize_id(metadata.get(key))
@@ -292,9 +270,7 @@ class MetadataAdapter:
 
     @classmethod
     def get_header(cls, metadata: dict[str, Any], config: HybridRetrieverConfig) -> Optional[str]:
-        """
-        Get header/title from configured metadata keys.
-        """
+        """Get header/title from configured metadata keys."""
 
         for key in config.header_keys:
             value = metadata.get(key)
@@ -307,9 +283,7 @@ class MetadataAdapter:
 
     @classmethod
     def normalize_payload(cls, payload: dict[str, Any], config: HybridRetrieverConfig) -> dict[str, Any]:
-        """
-        Normalize generic payload fields used by retrieval and debug output.
-        """
+        """Normalize generic payload fields used by retrieval and debug output."""
 
         payload = dict(payload or {})
 
@@ -331,28 +305,199 @@ class MetadataAdapter:
             payload["topics"] = sorted(set(payload["topics"] + cls.as_list(classic_rag.get("topics"))))
             payload["keywords"] = sorted(set(payload["keywords"] + cls.as_list(classic_rag.get("keywords"))))
 
+        payload["semantic_triples"] = cls.as_list(payload.get("semantic_triples"))
+        payload["semantic_concepts"] = cls.as_list(payload.get("semantic_concepts"))
+
         return payload
 
 
+class LegalSemanticTripleExtractor:
+    """
+    Lightweight rule-based extractor for legal semantic triples.
+
+    It does not call LLMs. It extracts conservative triples from article text:
+    - кредитор -> ВПРАВЕ_ТРЕБОВАТЬ -> исполнение
+    - должник -> ОБЯЗАН -> исполнить обязательство
+    - акцепт -> ЗАКЛЮЧАЕТ -> договор
+
+    The extracted triples are used only as weak graph/context signals.
+    """
+
+    SUBJECT_ALIASES: dict[str, tuple[str, ...]] = {
+        "кредитор": ("кредитор", "кредитора", "кредитору", "кредитором"),
+        "должник": ("должник", "должника", "должнику", "должником"),
+        "солидарный должник": ("солидарный должник", "солидарные должники", "солидарных должников"),
+        "субсидиарный должник": ("субсидиарный должник", "субсидиарному должнику", "субсидиарно ответственному лицу"),
+        "акцепт": ("акцепт", "акцепта", "акцептом"),
+        "оферта": ("оферта", "оферты", "оферту", "офертой"),
+        "договор": ("договор", "договора", "договором"),
+        "обязательство": ("обязательство", "обязательства", "обязательством"),
+        "третье лицо": ("третье лицо", "третьего лица", "третьим лицом"),
+        "суд": ("суд", "судом", "суда"),
+    }
+
+    OBJECT_ALIASES: dict[str, tuple[str, ...]] = {
+        "исполнение обязательства": ("исполнение обязательства", "исполнения обязательства", "исполнение"),
+        "долг": ("долг", "долга", "задолженность", "задолженности"),
+        "возмещение убытков": ("возмещение убытков", "возмещения убытков", "убытки", "убытков"),
+        "договор": ("договор", "договора", "договором"),
+        "оферта": ("оферта", "оферты", "оферту"),
+        "акцепт": ("акцепт", "акцепта", "акцептом"),
+        "обязательство": ("обязательство", "обязательства"),
+        "ответственность": ("ответственность", "ответственности"),
+        "право требования": ("право требования", "требование", "требования"),
+        "прекращение обязательства": ("прекращение обязательства", "обязательство прекращается", "прекращается"),
+    }
+
+    PREDICATE_PATTERNS: tuple[tuple[str, str], ...] = (
+        ("ВПРАВЕ_ТРЕБОВАТЬ", r"\b(вправе|имеет\s+право|может\s+требовать|право\s+требовать|требовать)\b"),
+        ("ОБЯЗАН", r"\b(обязан|обязано|обязаны|должен|должна|должно|должны)\b"),
+        ("НЕ_ВПРАВЕ", r"\b(не\s+вправе|не\s+может|запрещается|не\s+допускается)\b"),
+        ("ПРЕКРАЩАЕТ", r"\b(прекращает|прекращается|прекращаются|прекратить|расторгнуть|расторгается)\b"),
+        ("ВОЗНИКАЕТ", r"\b(возникает|возникают|возникновение|порождает|создает)\b"),
+        ("ЗАКЛЮЧАЕТ", r"\b(заключается|считается\s+заключ[её]нным|заключить|заключение)\b"),
+        ("ПРИНИМАЕТ", r"\b(принимает|принятие|принять|акцептует)\b"),
+        ("ИСПОЛНЯЕТ", r"\b(исполняет|исполнить|исполнение|исполнено|исполняются)\b"),
+        ("ОТВЕЧАЕТ", r"\b(отвечает|несет\s+ответственность|ответственность)\b"),
+    )
+
+    @classmethod
+    def extract(cls, text: str, max_triples: int = 12) -> list[dict[str, str]]:
+        """Extract conservative semantic triples from text."""
+
+        if not text:
+            return []
+
+        triples: list[dict[str, str]] = []
+        seen: set[str] = set()
+
+        for sentence in cls._sentences(text):
+            lower_sentence = sentence.lower()
+            subjects = cls._matched_concepts(lower_sentence, cls.SUBJECT_ALIASES)
+            objects = cls._matched_concepts(lower_sentence, cls.OBJECT_ALIASES)
+            predicates = cls._matched_predicates(lower_sentence)
+
+            if not subjects or not predicates:
+                continue
+
+            if not objects:
+                objects = cls._infer_objects_from_predicate(predicates)
+
+            for subject in subjects[:2]:
+                for predicate in predicates[:2]:
+                    for obj in objects[:2]:
+                        if subject == obj:
+                            continue
+
+                        key = f"{subject}|{predicate}|{obj}"
+                        if key in seen:
+                            continue
+
+                        seen.add(key)
+                        triples.append(
+                            {
+                                "subject": subject,
+                                "predicate": predicate,
+                                "object": obj,
+                            }
+                        )
+
+                        if len(triples) >= max_triples:
+                            return triples
+
+        return triples
+
+    @classmethod
+    def serialize(cls, triple: dict[str, str]) -> str:
+        """Serialize triple for payload/debug/scoring."""
+
+        return f"{triple.get('subject', '')} -> {triple.get('predicate', '')} -> {triple.get('object', '')}"
+
+    @classmethod
+    def concepts_from_triples(cls, triples: list[dict[str, str]]) -> list[str]:
+        """Extract unique subject/object concepts from triples."""
+
+        concepts: set[str] = set()
+
+        for triple in triples:
+            subject = str(triple.get("subject", "")).strip()
+            obj = str(triple.get("object", "")).strip()
+
+            if subject:
+                concepts.add(subject)
+            if obj:
+                concepts.add(obj)
+
+        return sorted(concepts)
+
+    @staticmethod
+    def _sentences(text: str) -> list[str]:
+        """Split text into short legal sentences/bullets."""
+
+        cleaned = re.sub(r"\s+", " ", text or " ").strip()
+        parts = re.split(r"(?<=[.!?;:])\s+|\s+-\s+", cleaned)
+        return [part.strip() for part in parts if len(part.strip()) >= 20]
+
+    @classmethod
+    def _matched_concepts(cls, text: str, aliases: dict[str, tuple[str, ...]]) -> list[str]:
+        """Return normalized concepts that are mentioned in text."""
+
+        result: list[str] = []
+
+        for concept, variants in aliases.items():
+            for variant in variants:
+                pattern = r"(?<![а-яa-z0-9_])" + re.escape(variant.lower()) + r"(?![а-яa-z0-9_])"
+                if re.search(pattern, text, flags=re.IGNORECASE):
+                    result.append(concept)
+                    break
+
+        return result
+
+    @classmethod
+    def _matched_predicates(cls, text: str) -> list[str]:
+        """Return normalized predicates mentioned in text."""
+
+        result: list[str] = []
+
+        for predicate, pattern in cls.PREDICATE_PATTERNS:
+            if re.search(pattern, text, flags=re.IGNORECASE):
+                result.append(predicate)
+
+        return result
+
+    @staticmethod
+    def _infer_objects_from_predicate(predicates: list[str]) -> list[str]:
+        """Infer conservative object when a sentence has a legal predicate but no explicit object."""
+
+        inferred: list[str] = []
+
+        if "ЗАКЛЮЧАЕТ" in predicates:
+            inferred.append("договор")
+        if "ПРЕКРАЩАЕТ" in predicates:
+            inferred.append("обязательство")
+        if "ВПРАВЕ_ТРЕБОВАТЬ" in predicates:
+            inferred.append("исполнение обязательства")
+        if "ОБЯЗАН" in predicates:
+            inferred.append("исполнение обязательства")
+        if "ОТВЕЧАЕТ" in predicates:
+            inferred.append("ответственность")
+
+        return inferred or ["правовое последствие"]
+
+
 class ChunkAdapter:
-    """
-    Converts project chunks into plain fields and LlamaIndex documents.
-    """
+    """Converts project chunks into plain fields and LlamaIndex documents."""
 
     @staticmethod
     def extract_text(chunk: Any) -> str:
-        """
-        Extract text from chunk.
-        """
+        """Extract text from chunk."""
 
         text = getattr(chunk, "text", None) or getattr(chunk, "content", None) or getattr(chunk, "page_content", None) or ""
         return str(text)
 
     @classmethod
     def extract_metadata(cls, chunk: Any, config: HybridRetrieverConfig) -> dict[str, Any]:
-        """
-        Extract normalized metadata from chunk.
-        """
+        """Extract normalized metadata from chunk."""
 
         metadata_raw = getattr(chunk, "metadata", None) or getattr(chunk, "payload", None) or {}
         metadata = MetadataAdapter.to_dict(metadata_raw)
@@ -360,9 +505,7 @@ class ChunkAdapter:
 
     @classmethod
     def to_llama_document(cls, chunk: Any, config: HybridRetrieverConfig) -> Optional[Document]:
-        """
-        Convert project chunk to LlamaIndex Document.
-        """
+        """Convert project chunk to LlamaIndex Document."""
 
         text = cls.extract_text(chunk)
         metadata = cls.extract_metadata(chunk, config)
@@ -374,34 +517,26 @@ class ChunkAdapter:
 
 
 class TextTokenizer:
-    """
-    Simple Russian-friendly tokenizer for BM25, metadata and graph matching.
-    """
+    """Simple Russian-friendly tokenizer for BM25, metadata and graph matching."""
 
     TOKEN_PATTERN = re.compile(r"[а-яА-ЯёЁa-zA-Z0-9_.]+")
 
     @classmethod
     def tokenize(cls, text: str) -> list[str]:
-        """
-        Tokenize text.
-        """
+        """Tokenize text."""
 
         return [token.lower() for token in cls.TOKEN_PATTERN.findall(text or "") if len(token) > 1]
 
 
 class QdrantDenseRetriever(BaseDenseRetriever):
-    """
-    Dense retriever based on Qdrant.
-    """
+    """Dense retriever based on Qdrant."""
 
     def __init__(self, vector_store: Any, config: HybridRetrieverConfig) -> None:
         self.vector_store = vector_store
         self.config = config
 
     def search(self, query_vec: list[float], k: int) -> list[SearchResult]:
-        """
-        Search Qdrant.
-        """
+        """Search Qdrant."""
 
         hits = self.vector_store.search(query_vector=query_vec, limit=k)
         results: list[SearchResult] = []
@@ -420,9 +555,7 @@ class QdrantDenseRetriever(BaseDenseRetriever):
 
 
 class BM25SparseRetriever(BaseSparseRetriever):
-    """
-    BM25 sparse retriever over loaded chunks.
-    """
+    """BM25 sparse retriever over loaded chunks."""
 
     def __init__(self, config: HybridRetrieverConfig, chunks: Optional[list[Any]] = None) -> None:
         self.config = config
@@ -434,9 +567,7 @@ class BM25SparseRetriever(BaseSparseRetriever):
             self.build(chunks)
 
     def build(self, chunks: list[Any]) -> None:
-        """
-        Build BM25 index from chunks.
-        """
+        """Build BM25 index from chunks."""
 
         documents: list[Document] = []
 
@@ -446,16 +577,11 @@ class BM25SparseRetriever(BaseSparseRetriever):
                 documents.append(document)
 
         self.documents = documents
-        self.tokenized_corpus = [
-            TextTokenizer.tokenize(self._enriched_text(document))
-            for document in documents
-        ]
+        self.tokenized_corpus = [TextTokenizer.tokenize(self._enriched_text(document)) for document in documents]
         self.bm25 = BM25Okapi(self.tokenized_corpus) if self.tokenized_corpus else None
 
     def search(self, query: str, k: int) -> list[SearchResult]:
-        """
-        Search BM25 index.
-        """
+        """Search BM25 index."""
 
         if self.bm25 is None:
             return []
@@ -490,9 +616,7 @@ class BM25SparseRetriever(BaseSparseRetriever):
 
     @staticmethod
     def _enriched_text(document: Document) -> str:
-        """
-        Build BM25 text enriched by metadata.
-        """
+        """Build BM25 text enriched by metadata and semantic triples."""
 
         metadata = document.metadata or {}
         metadata_text = " ".join(
@@ -504,6 +628,8 @@ class BM25SparseRetriever(BaseSparseRetriever):
                 metadata.get("legal_domain"),
                 " ".join(metadata.get("topics") or []),
                 " ".join(metadata.get("keywords") or []),
+                " ".join(metadata.get("semantic_triples") or []),
+                " ".join(metadata.get("semantic_concepts") or []),
             ]
             if value
         )
@@ -512,7 +638,7 @@ class BM25SparseRetriever(BaseSparseRetriever):
 
 class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
     """
-    Metadata + context GraphRAG retriever.
+    Metadata + context + semantic-triple GraphRAG retriever.
 
     Graph expansion is triggered from high-confidence dense/BM25 seed articles.
     """
@@ -524,25 +650,36 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
         self.doc_graph: dict[str, list[tuple[str, float, str | None]]] = {}
         self.topic_to_doc_ids: dict[str, set[str]] = {}
         self.keyword_to_doc_ids: dict[str, set[str]] = {}
+        self.triple_concept_to_doc_ids: dict[str, set[str]] = {}
 
         if chunks:
             self.build(chunks)
 
     def build(self, chunks: list[Any]) -> None:
-        """
-        Build graph from metadata and content references.
-        """
+        """Build graph from metadata, content references and semantic triples."""
 
         self.documents = []
         self.doc_id_to_docs = {}
         self.doc_graph = {}
         self.topic_to_doc_ids = {}
         self.keyword_to_doc_ids = {}
+        self.triple_concept_to_doc_ids = {}
 
         for chunk in chunks:
             document = ChunkAdapter.to_llama_document(chunk, self.config)
             if document is None:
                 continue
+
+            metadata = dict(document.metadata or {})
+            triples = LegalSemanticTripleExtractor.extract(
+                document.text,
+                max_triples=self.config.max_semantic_triples_per_doc,
+            )
+            serialized_triples = [LegalSemanticTripleExtractor.serialize(triple) for triple in triples]
+            semantic_concepts = LegalSemanticTripleExtractor.concepts_from_triples(triples)
+            metadata["semantic_triples"] = sorted(set(MetadataAdapter.as_list(metadata.get("semantic_triples")) + serialized_triples))
+            metadata["semantic_concepts"] = sorted(set(MetadataAdapter.as_list(metadata.get("semantic_concepts")) + semantic_concepts))
+            document.metadata = MetadataAdapter.normalize_payload(metadata, self.config)
 
             index = len(self.documents)
             self.documents.append(document)
@@ -556,6 +693,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
             self.doc_graph.setdefault(doc_id, [])
 
             self._index_topics_and_keywords(doc_id=doc_id, metadata=metadata)
+            self._index_semantic_triples(doc_id=doc_id, metadata=metadata)
             self._index_relations(doc_id=doc_id, metadata=metadata)
 
             if self.config.enable_related_article_edges:
@@ -571,10 +709,11 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
             self._build_shared_topic_edges()
             self._build_shared_keyword_edges()
 
+        if self.config.enable_semantic_triple_edges:
+            self._build_shared_triple_concept_edges()
+
     def _index_topics_and_keywords(self, *, doc_id: str, metadata: dict[str, Any]) -> None:
-        """
-        Index topics and keywords for weak graph expansion.
-        """
+        """Index topics and keywords for weak graph expansion."""
 
         topics = []
         keywords = []
@@ -602,10 +741,16 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
             if keyword_key:
                 self.keyword_to_doc_ids.setdefault(keyword_key, set()).add(doc_id)
 
+    def _index_semantic_triples(self, *, doc_id: str, metadata: dict[str, Any]) -> None:
+        """Index semantic triple concepts for weak graph expansion."""
+
+        for concept in MetadataAdapter.as_list(metadata.get("semantic_concepts")):
+            concept_key = concept.lower().strip()
+            if concept_key:
+                self.triple_concept_to_doc_ids.setdefault(concept_key, set()).add(doc_id)
+
     def _index_relations(self, *, doc_id: str, metadata: dict[str, Any]) -> None:
-        """
-        Index graph_rag relations.
-        """
+        """Index graph_rag relations."""
 
         graph_metadata = metadata.get(self.config.graph_metadata_key)
         if not isinstance(graph_metadata, dict):
@@ -632,9 +777,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
             )
 
     def _index_related_articles(self, *, doc_id: str, metadata: dict[str, Any]) -> None:
-        """
-        Index explicit related_articles metadata.
-        """
+        """Index explicit related_articles metadata."""
 
         for value in MetadataAdapter.as_list(metadata.get("related_articles")):
             target_doc_id = MetadataAdapter.normalize_id(value)
@@ -647,9 +790,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
                 )
 
     def _index_tree_edges(self, *, doc_id: str, metadata: dict[str, Any]) -> None:
-        """
-        Index tree_rag navigation/parent edges.
-        """
+        """Index tree_rag navigation/parent edges."""
 
         tree_rag = metadata.get("tree_rag")
         if not isinstance(tree_rag, dict):
@@ -669,9 +810,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
                 )
 
     def _index_content_references(self, *, doc_id: str, text: str) -> None:
-        """
-        Index explicit references found in article text.
-        """
+        """Index explicit references found in article text."""
 
         for target_doc_id in self._extract_article_references(text):
             if target_doc_id == doc_id:
@@ -685,18 +824,23 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
             )
 
     def _build_shared_topic_edges(self) -> None:
-        """
-        Build weak graph edges between documents sharing topics.
-        """
+        """Build weak graph edges between documents sharing topics."""
 
         self._build_shared_edges(self.topic_to_doc_ids, self.config.shared_topic_weight, "SHARED_TOPIC")
 
     def _build_shared_keyword_edges(self) -> None:
-        """
-        Build weak graph edges between documents sharing keywords.
-        """
+        """Build weak graph edges between documents sharing keywords."""
 
         self._build_shared_edges(self.keyword_to_doc_ids, self.config.shared_keyword_weight, "SHARED_KEYWORD")
+
+    def _build_shared_triple_concept_edges(self) -> None:
+        """Build weak graph edges between documents sharing semantic triple concepts."""
+
+        self._build_shared_edges(
+            self.triple_concept_to_doc_ids,
+            self.config.shared_triple_concept_weight,
+            "SHARED_TRIPLE_CONCEPT",
+        )
 
     def _build_shared_edges(
         self,
@@ -704,9 +848,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
         weight: float,
         relation_type: str,
     ) -> None:
-        """
-        Build weak edges from inverted metadata index.
-        """
+        """Build weak edges from inverted metadata/semantic index."""
 
         for _, doc_ids in index.items():
             ordered_doc_ids = sorted(doc_ids)
@@ -724,7 +866,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
                         relation_type=relation_type,
                     )
                     added += 1
-                    if added >= self.config.max_topic_edges_per_doc:
+                    if added >= self.config.max_triple_edges_per_doc:
                         break
 
     def _add_edge(
@@ -735,9 +877,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
         weight: float,
         relation_type: str | None,
     ) -> None:
-        """
-        Add graph edge and keep the strongest duplicate edge.
-        """
+        """Add graph edge and keep the strongest duplicate edge."""
 
         if not source_doc_id or not target_doc_id:
             return
@@ -755,9 +895,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
 
     @staticmethod
     def _extract_article_references(text: str) -> list[str]:
-        """
-        Extract referenced article ids from legal text.
-        """
+        """Extract referenced article ids from legal text."""
 
         if not text:
             return []
@@ -782,9 +920,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
         return references
 
     def _extract_relation_target(self, relation: dict[str, Any]) -> Optional[str]:
-        """
-        Extract relation target document id.
-        """
+        """Extract relation target document id."""
 
         for key in self.config.relation_target_keys:
             normalized = MetadataAdapter.normalize_id(relation.get(key))
@@ -793,9 +929,7 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
         return None
 
     def expand(self, seed_doc_ids: list[str], k: int) -> list[SearchResult]:
-        """
-        Expand from high-confidence seed articles through graph relations.
-        """
+        """Expand from high-confidence seed articles through graph relations."""
 
         if not self.documents:
             return []
@@ -803,14 +937,15 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
         results: list[SearchResult] = []
         seen_result_keys: set[str] = set()
 
-        seed_doc_ids = [doc_id for doc_id in seed_doc_ids if doc_id in self.doc_graph][:self.config.graph_seed_top_n]
+        seed_doc_ids = [doc_id for doc_id in seed_doc_ids if doc_id in self.doc_graph][: self.config.graph_seed_top_n]
 
         for seed_rank, seed_doc_id in enumerate(seed_doc_ids, start=1):
             seed_base_score = 1.0 / seed_rank
             related = [
-                edge for edge in sorted(self.doc_graph.get(seed_doc_id, []), key=lambda item: item[1], reverse=True)
+                edge
+                for edge in sorted(self.doc_graph.get(seed_doc_id, []), key=lambda item: item[1], reverse=True)
                 if edge[0] in self.doc_id_to_docs
-            ][:self.config.graph_max_related_per_seed]
+            ][: self.config.graph_max_related_per_seed]
 
             for target_doc_id, relation_weight, relation_type in related:
                 graph_score = seed_base_score * relation_weight * self.config.graph_relation_decay
@@ -843,43 +978,35 @@ class LlamaIndexMetadataGraphRetriever(BaseGraphRetriever):
         return results
 
     def search(self, query: str, k: int) -> list[SearchResult]:
-        """
-        Conservative backward-compatible graph search.
-        """
+        """Conservative backward-compatible graph search."""
 
         query_tokens = set(TextTokenizer.tokenize(query))
         doc_scores: dict[str, float] = {}
 
-        for topic, doc_ids in self.topic_to_doc_ids.items():
-            overlap = len(query_tokens & set(TextTokenizer.tokenize(topic)))
-            if overlap <= 0:
-                continue
-            for doc_id in doc_ids:
-                doc_scores[doc_id] = doc_scores.get(doc_id, 0.0) + overlap
-
-        for keyword, doc_ids in self.keyword_to_doc_ids.items():
-            overlap = len(query_tokens & set(TextTokenizer.tokenize(keyword)))
-            if overlap <= 0:
-                continue
-            for doc_id in doc_ids:
-                doc_scores[doc_id] = doc_scores.get(doc_id, 0.0) + overlap * 1.25
+        for index, multiplier in (
+            (self.topic_to_doc_ids, 1.0),
+            (self.keyword_to_doc_ids, 1.25),
+            (self.triple_concept_to_doc_ids, 1.35),
+        ):
+            for value, doc_ids in index.items():
+                overlap = len(query_tokens & set(TextTokenizer.tokenize(value)))
+                if overlap <= 0:
+                    continue
+                for doc_id in doc_ids:
+                    doc_scores[doc_id] = doc_scores.get(doc_id, 0.0) + overlap * multiplier
 
         ranked_doc_ids = sorted(doc_scores.items(), key=lambda item: item[1], reverse=True)
         return self.expand([doc_id for doc_id, _ in ranked_doc_ids], k=k)
 
 
 class MetadataScoringService:
-    """
-    Scores candidate chunks using metadata and query context.
-    """
+    """Scores candidate chunks using metadata and query context."""
 
     def __init__(self, config: HybridRetrieverConfig) -> None:
         self.config = config
 
     def score(self, query: str, result: SearchResult) -> float:
-        """
-        Return metadata relevance score in range 0..1.
-        """
+        """Return metadata/semantic relevance score in range 0..1."""
 
         payload = result.payload or {}
         query_tokens = set(TextTokenizer.tokenize(query))
@@ -892,6 +1019,7 @@ class MetadataScoringService:
         keyword_score = self._field_overlap(query_tokens, payload.get("keywords") or [])
         domain_score = self._field_overlap(query_tokens, [payload.get("legal_domain"), payload.get("chapter"), payload.get("paragraph")])
         related_score = 1.0 if self._query_mentions_related_article(query, payload) else 0.0
+        triple_score = self._semantic_triple_score(query_tokens, payload)
 
         score = (
             self.config.metadata_header_weight * header_score
@@ -899,15 +1027,14 @@ class MetadataScoringService:
             + self.config.metadata_keyword_weight * keyword_score
             + self.config.metadata_domain_weight * domain_score
             + self.config.metadata_related_weight * related_score
+            + self.config.metadata_triple_weight * triple_score
         )
 
         return max(0.0, min(1.0, score))
 
     @staticmethod
     def _field_overlap(query_tokens: set[str], values: Any) -> float:
-        """
-        Compute token overlap between query and metadata values.
-        """
+        """Compute token overlap between query and metadata values."""
 
         text = " ".join(MetadataAdapter.as_list(values))
         value_tokens = set(TextTokenizer.tokenize(text))
@@ -918,10 +1045,23 @@ class MetadataScoringService:
         return len(query_tokens & value_tokens) / max(len(query_tokens), 1)
 
     @staticmethod
+    def _semantic_triple_score(query_tokens: set[str], payload: dict[str, Any]) -> float:
+        """Score query overlap with semantic triples and extracted concepts."""
+
+        triple_text = " ".join(
+            MetadataAdapter.as_list(payload.get("semantic_triples"))
+            + MetadataAdapter.as_list(payload.get("semantic_concepts"))
+        )
+        triple_tokens = set(TextTokenizer.tokenize(triple_text))
+
+        if not triple_tokens:
+            return 0.0
+
+        return len(query_tokens & triple_tokens) / max(len(query_tokens), 1)
+
+    @staticmethod
     def _query_mentions_related_article(query: str, payload: dict[str, Any]) -> bool:
-        """
-        Check whether query explicitly mentions this article or related article.
-        """
+        """Check whether query explicitly mentions this article or related article."""
 
         article = MetadataAdapter.normalize_id(payload.get("article_number"))
         related = {MetadataAdapter.normalize_id(item) for item in MetadataAdapter.as_list(payload.get("related_articles"))}
@@ -933,9 +1073,7 @@ class MetadataScoringService:
 
 
 class AlphaFusionService:
-    """
-    Alpha fusion for dense, BM25, graph and metadata-aware scores.
-    """
+    """Alpha fusion for dense, BM25, graph and metadata-aware scores."""
 
     def __init__(self, config: HybridRetrieverConfig) -> None:
         self.config = config
@@ -950,9 +1088,7 @@ class AlphaFusionService:
         graph_results: list[SearchResult],
         top_k: int,
     ) -> list[SearchResult]:
-        """
-        Fuse retrieval results.
-        """
+        """Fuse retrieval results."""
 
         dense_results = self._rank_normalize(dense_results)
         bm25_results = self._rank_normalize(bm25_results)
@@ -977,18 +1113,13 @@ class AlphaFusionService:
         filtered = self._basic_filter(fused)
         filtered.sort(key=lambda item: item.score, reverse=True)
 
-        diversified = self._diversify_by_article(
-            hits=filtered,
-            top_k=top_k,
-        )
+        diversified = self._diversify_by_article(hits=filtered, top_k=top_k)
 
         return diversified[:top_k]
 
     @staticmethod
     def _rank_normalize(results: list[SearchResult]) -> list[SearchResult]:
-        """
-        Convert ranking position to stable 0..1 score.
-        """
+        """Convert ranking position to stable 0..1 score."""
 
         for rank, result in enumerate(results or [], start=1):
             result.score = 1.0 / rank
@@ -1003,9 +1134,7 @@ class AlphaFusionService:
         weight: float,
         source: str,
     ) -> None:
-        """
-        Add weighted source results.
-        """
+        """Add weighted source results."""
 
         for result in results:
             key = self._dedupe_key(result)
@@ -1023,9 +1152,7 @@ class AlphaFusionService:
             merged[key].payload = self._merge_payloads(merged[key].payload or {}, result.payload or {}, source)
 
     def _basic_filter(self, hits: list[SearchResult]) -> list[SearchResult]:
-        """
-        Remove empty, short and duplicate results.
-        """
+        """Remove empty, short and duplicate results."""
 
         seen: set[str] = set()
         result: list[SearchResult] = []
@@ -1044,24 +1171,8 @@ class AlphaFusionService:
 
         return result
 
-    def _diversify_by_article(
-        self,
-        *,
-        hits: list[SearchResult],
-        top_k: int,
-    ) -> list[SearchResult]:
-        """
-        Limit repeated chunks from the same article after fusion.
-
-        Why:
-        - without this step top-5 may contain 3-4 chunks from one article;
-        - article-level coverage becomes worse;
-        - reranker receives less diverse legal context.
-
-        Strategy:
-        1. First pass keeps no more than max_chunks_per_article per article.
-        2. Second pass fills remaining slots if the first pass was too strict.
-        """
+    def _diversify_by_article(self, *, hits: list[SearchResult], top_k: int) -> list[SearchResult]:
+        """Limit repeated chunks from the same article after fusion."""
 
         selected: list[SearchResult] = []
         overflow: list[SearchResult] = []
@@ -1069,12 +1180,7 @@ class AlphaFusionService:
 
         for hit in hits:
             payload = hit.payload or {}
-            article = str(
-                payload.get("retrieval_doc_id")
-                or payload.get("article_number")
-                or "unknown"
-            )
-
+            article = str(payload.get("retrieval_doc_id") or payload.get("article_number") or "unknown")
             current_count = article_counts.get(article, 0)
 
             if current_count < self.config.max_chunks_per_article:
@@ -1095,9 +1201,7 @@ class AlphaFusionService:
 
     @staticmethod
     def _dedupe_key(result: SearchResult) -> str:
-        """
-        Build stable dedupe key.
-        """
+        """Build stable dedupe key."""
 
         payload = result.payload or {}
         doc_id = payload.get("retrieval_doc_id") or payload.get("article_number")
@@ -1114,9 +1218,7 @@ class AlphaFusionService:
 
     @staticmethod
     def _merge_payloads(left: dict[str, Any], right: dict[str, Any], source: str) -> dict[str, Any]:
-        """
-        Merge payloads from duplicate results.
-        """
+        """Merge payloads from duplicate results."""
 
         merged = dict(left)
 
@@ -1140,7 +1242,7 @@ class Retriever(BaseRetriever):
     Hybrid Retriever:
     - Dense Qdrant
     - BM25 sparse
-    - metadata/context graph expansion
+    - metadata/context/semantic graph expansion
     - metadata-aware AlphaFusion
     """
 
@@ -1162,17 +1264,13 @@ class Retriever(BaseRetriever):
         self.fusion = AlphaFusionService(self.config)
 
     def build_sparse_and_graph(self, chunks: list[Any]) -> None:
-        """
-        Build BM25 and graph indexes after ingestion.
-        """
+        """Build BM25 and graph indexes after ingestion."""
 
         self.bm25.build(chunks)
         self.graph.build(chunks)
 
     def retrieve(self, query: str, top_k: int = 10) -> list[SearchResult]:
-        """
-        Retrieve using Dense + BM25 + graph expansion + metadata scoring.
-        """
+        """Retrieve using Dense + BM25 + graph expansion + metadata/semantic scoring."""
 
         query = (query or "").strip()
         if not query:
@@ -1205,12 +1303,10 @@ class Retriever(BaseRetriever):
         dense_candidates: list[SearchResult],
         bm25_candidates: list[SearchResult],
     ) -> list[str]:
-        """
-        Select graph expansion seeds from high-confidence dense/BM25 candidates.
-        """
+        """Select graph expansion seeds from high-confidence dense/BM25 candidates."""
 
-        candidates = dense_candidates[:self.config.graph_seed_top_n]
-        candidates += bm25_candidates[:max(2, self.config.graph_seed_top_n // 2)]
+        candidates = dense_candidates[: self.config.graph_seed_top_n]
+        candidates += bm25_candidates[: max(2, self.config.graph_seed_top_n // 2)]
 
         seed_doc_ids: list[str] = []
         seen: set[str] = set()
@@ -1229,12 +1325,10 @@ class Retriever(BaseRetriever):
         return seed_doc_ids
 
     def debug_query(self, query: str, top_k: int = 10) -> None:
-        """
-        Print hybrid debug output.
-        """
+        """Print hybrid debug output."""
 
         print("\n" + "=" * 100)
-        print("[HYBRID RETRIEVAL DEBUG: DENSE + BM25 + GRAPH + METADATA]")
+        print("[HYBRID RETRIEVAL DEBUG: DENSE + BM25 + GRAPH + METADATA + SEMANTIC TRIPLES]")
         print(f"QUERY: {query}")
         print("=" * 100)
 
@@ -1256,6 +1350,7 @@ class Retriever(BaseRetriever):
             print(f"HEADER  : {payload.get('header', 'unknown')}")
             print(f"TOPICS  : {payload.get('topics')}")
             print(f"KEYWORDS: {payload.get('keywords')}")
+            print(f"TRIPLES : {payload.get('semantic_triples')}")
             print(f"GRAPH SEED: {payload.get('graph_seed_doc_id')}")
             print(f"GRAPH REL : {payload.get('graph_relation_type')}")
             print(f"ID      : {hit.id}")
