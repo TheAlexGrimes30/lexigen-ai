@@ -1,49 +1,79 @@
 import re
-from typing import List, Set
+from enum import Enum
 
-from rag.rag_config import RAGResponse
-from rag.search_result import SearchResult
+from backend.modules.rag.generator import ContractRiskAnalysisPromptBuilder, CreditPromptBuilder
+from backend.modules.rag.rag_config import RAGResponse
+from backend.modules.rag.search_result_service import SearchResult
+
+
+class RAGMode(str, Enum):
+    USER_QUERY = "user_query"
+    DOCUMENT_ANALYSIS = "document_analysis"
 
 
 class RAGService:
+    """Сервис RAG с разными параметрами для вопроса и анализа документа."""
 
     def __init__(
             self,
             retriever,
             reranker,
             generator,
-            max_context_chars: int = 3500,
-            min_final_score: float = 0.50
+            min_final_score: float = 0.50,
     ):
         self.retriever = retriever
         self.reranker = reranker
         self.generator = generator
-
-        self.max_context_chars = max_context_chars
         self.min_final_score = min_final_score
 
-    def ask(self, query: str) -> RAGResponse:
+    def ask(
+            self,
+            query: str,
+            mode: RAGMode = RAGMode.USER_QUERY,
+    ) -> RAGResponse:
+        settings = self._settings_for_mode(mode)
 
-        hits = self.retriever.retrieve(query=query, top_k=25)
-        reranked = self.reranker.rerank(query=query, hits=hits, top_n=10)
+        hits = self.retriever.retrieve(
+            query=query,
+            top_k=settings["top_k"],
+        )
+
+        reranked = (
+            self.reranker.rerank(
+                query=query,
+                hits=hits,
+                top_n=settings["top_n"],
+            )
+            if settings["use_reranker"]
+            else hits[:settings["top_n"]]
+        )
 
         filtered = self._filter_hits(reranked)
 
         if not filtered:
-            filtered = reranked[:5]
+            filtered = reranked[:settings["top_n"]]
 
-        context = self._build_context(filtered)
+        context = self._build_context(
+            hits=filtered,
+            max_context_chars=settings["max_context_chars"],
+        )
 
         if len(context.strip()) < 80:
-            context = self._fallback_context(reranked[:5])
+            context = self._fallback_context(filtered)
 
         context = self._sanitize_context(context)
 
-        raw_answer = self.generator.generate(
-            query=query,
-            context=context,
-            hits=filtered
-        )
+        old_prompt_builder = self.generator.prompt_builder
+        self.generator.prompt_builder = settings["prompt_builder"]
+
+        try:
+            raw_answer = self.generator.generate(
+                query=query,
+                context=context,
+                hits=filtered
+            )
+        finally:
+            self.generator.prompt_builder = old_prompt_builder
 
         answer = self._validate_and_fix(raw_answer, filtered)
 
@@ -54,8 +84,26 @@ class RAGService:
 
         return RAGResponse(
             answer=answer,
-            sources=sources
+            sources=sources,
         )
+
+    def _settings_for_mode(self, mode: RAGMode) -> dict:
+        if mode == RAGMode.USER_QUERY:
+            return {
+                "top_k": 25,
+                "top_n": 10,
+                "max_context_chars": 3500,
+                "use_reranker": False,
+                "prompt_builder": CreditPromptBuilder(),
+            }
+
+        return {
+            "top_k": 8,
+            "top_n": 4,
+            "max_context_chars": 1200,
+            "use_reranker": False,
+            "prompt_builder": ContractRiskAnalysisPromptBuilder(),
+        }
 
     def _sanitize_context(self, text: str) -> str:
         text = re.sub(r"(?i)\b(a:|q:)\b", "", text)
@@ -67,63 +115,67 @@ class RAGService:
     def _normalize(self, text: str) -> str:
         return re.sub(r"\s+", " ", text.lower()).strip()
 
-    def _filter_hits(self, hits: List[SearchResult]) -> List[SearchResult]:
-
+    def _filter_hits(self, hits: list[SearchResult]) -> list[SearchResult]:
         filtered = []
-        seen: Set[tuple] = set()
+        seen: set[tuple] = set()
 
-        for h in hits:
+        for hit in hits:
+            article = hit.payload.get("article_number")
 
-            article = h.payload.get("article_number")
             if not article:
                 continue
 
-            score = getattr(h, "final_score", 0.0)
+            score = getattr(hit, "final_score", hit.score)
+
             if score < self.min_final_score:
                 continue
 
-            header = (h.payload.get("header") or "").lower()
-
+            header = (hit.payload.get("header") or "").lower()
             key = (article, header)
+
             if key in seen:
                 continue
 
             seen.add(key)
-            filtered.append(h)
+            filtered.append(hit)
 
             if len(filtered) >= 6:
                 break
 
         return filtered
 
-    def _build_context(self, hits: List[SearchResult]) -> str:
-
+    def _build_context(
+            self,
+            hits: list[SearchResult],
+            max_context_chars: int,
+    ) -> str:
         parts = []
         size = 0
         seen = set()
 
-        for h in hits:
+        for hit in hits:
+            text = (hit.text or "").strip()
 
-            text = (h.text or "").strip()
             if len(text) < 40:
                 continue
 
             norm = self._normalize(text)
+
             if norm in seen:
                 continue
 
             seen.add(norm)
 
-            article = h.payload.get("article_number", "?")
-            header = h.payload.get("header", "")
-            source = h.payload.get("source", "Нормативный акт")
+            article = hit.payload.get("article_number", "?")
+            header = hit.payload.get("header", "")
+            source = hit.payload.get("source", "Нормативный акт")
 
             block = f"""[СТАТЬЯ {article} — {source}]
             {header}
 
             {text[:900]}""".strip()
 
-            if size + len(block) > self.max_context_chars:
+            if size + len(block) > max_context_chars:
                 break
 
             parts.append(block)
@@ -131,86 +183,67 @@ class RAGService:
 
         return "\n\n".join(parts)
 
-    def _fallback_context(self, hits: List[SearchResult]) -> str:
-
+    def _fallback_context(self, hits: list[SearchResult]) -> str:
         parts = []
 
-        for h in hits:
+        for hit in hits:
+            text = (hit.text or "").strip()
 
-            text = (h.text or "").strip()
             if len(text) < 60:
                 continue
 
-            article = h.payload.get("article_number", "?")
-            source = h.payload.get("source", "Нормативный акт")
+            article = hit.payload.get("article_number", "?")
+            source = hit.payload.get("source", "Нормативный акт")
 
             parts.append(
-                f"[СТАТЬЯ {article} — {source}]\n{text[:600]}"
+                f"[СТАТЬЯ {article} — {source}]\n{text[:500]}"
             )
 
         return "\n\n".join(parts)
 
-    def _validate_and_fix(self, text: str, hits: List[SearchResult]) -> str:
-
+    def _validate_and_fix(self, text: str, hits: list[SearchResult]) -> str:
         if not text:
             return "Недостаточно данных."
 
         text = text.strip()
-
-        text = re.sub(r"(?i)^(a:|q:)\s*", "", text)
-
-        text = re.sub(
-            r"(?is)\b(reasoning|analysis|explanation|let's|okay|first|i need)\b.*",
-            "",
-            text
-        )
-
-        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        text = re.sub(r"(?i)^(a:|q:|ответ:)\s*", "", text)
+        text = re.sub(r"\n{3,}", "\n\n", text)
+        text = re.sub(r"[ \t]+", " ", text)
 
         allowed_articles = {
-            str(h.payload.get("article_number"))
-            for h in hits
-            if h.payload.get("article_number")
+            str(hit.payload.get("article_number"))
+            for hit in hits
+            if hit.payload.get("article_number")
         }
 
         def fix_article(match):
-            art = match.group(1)
-            return f"статья {art}" if art in allowed_articles else "статья ?"
+            article = match.group(1)
+            return f"статья {article}" if article in allowed_articles else "статья ?"
 
-        text = re.sub(r"статья\s+(\d+)", fix_article, text)
-
-        bullets = re.findall(r"(?:^|\n)-\s+(.*)", text)
-        if bullets:
-            return "Норма права устанавливает " + \
-                ", ".join(b.strip(" .") for b in bullets)
-
-        text = re.sub(r"\s+", " ", text).strip()
+        text = re.sub(r"статья\s+(\d+)", fix_article, text, flags=re.IGNORECASE)
 
         if len(text.split()) < 3:
             return "Недостаточно данных."
 
-        return text
+        return text.strip()
 
-    def _build_sources(self, hits: List[SearchResult]) -> List[str]:
-
+    def _build_sources(self, hits: list[SearchResult]) -> list[str]:
+        sources = []
         seen = set()
-        out = []
 
-        for h in hits:
-
-            article = h.payload.get("article_number")
-            source = h.payload.get("source")
+        for hit in hits:
+            article = hit.payload.get("article_number")
+            source = hit.payload.get("source", "Гражданский кодекс Российской Федерации")
 
             if not article:
                 continue
 
-            if not source:
-                source = "Нормативный акт"
+            value = f"{source}, статья {article}"
 
-            src = f"{source}, статья {article}"
+            if value in seen:
+                continue
 
-            if src not in seen:
-                seen.add(src)
-                out.append(src)
+            seen.add(value)
+            sources.append(value)
 
-        return out
+        return sources

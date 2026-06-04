@@ -74,9 +74,8 @@ class RAG:
         base_path = Path(__file__).resolve()
         project_root = base_path.parents[1]
         model_path = project_root / "models" / "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
-
+        reranker_path = project_root / "models" / "bge-reranker-v2-m3"
         rag_db_path = project_root / "rag_db"
-
         self.debug_path = project_root / "debug"
 
 
@@ -110,7 +109,7 @@ class RAG:
 
         self.vector_store = VectorStore(
             client=self.qdrant,
-            collection_name="credit_collection",
+            collection_name="credit_graph_collection",
             vector_size=self.embedder.dim,
             distance=Distance.COSINE
         )
@@ -130,7 +129,7 @@ class RAG:
 
 
         self.reranker = Reranker(
-            model_name="BAAI/bge-reranker-v2-m3",
+            model_name=str(reranker_path),
             top_n=5
         )
 
@@ -150,7 +149,6 @@ class RAG:
             retriever=self.retriever,
             reranker=self.reranker,
             generator=self.generator,
-            max_context_chars=3500,
             min_final_score=0.50
         )
 
@@ -168,6 +166,10 @@ class RAG:
         chunks = self.ingestion.load_chunks()
 
         print(f"Loaded chunks: {len(chunks)}")
+
+        # Dense vectors are stored in Qdrant, but BM25 and GraphRAG are in-memory.
+        # They must be rebuilt on every application start, even if Qdrant already has points.
+        self.retriever.build_sparse_and_graph(chunks)
 
         self.index_if_needed(chunks)
 
@@ -450,18 +452,27 @@ if __name__ == "__main__":
 
         print("\nIndex ready.\n")
 
-        print("\n" + "#" * 100)
-        print("[RAG EVALUATION START]")
-        print("#" * 100)
-
-        evaluate_rag(
-            rag,
-            dataset,
-            output_path="rag_eval_results_hybrid_2.json",
-            use_reranker=True,
-            retrieve_top_k=20,
-            rerank_top_n=5
+        query = (
+        "Риски если брать кредит на малый бизнес. Распиши все возможные риски для начинающего предпринимателя"
         )
+
+        print("\n" + "=" * 100)
+
+        print("[GENERATOR TEST]")
+
+        print("=" * 100)
+
+        print(f"\nQUERY:\n{query}")
+
+        print("\n" + "=" * 100)
+
+        answer = rag.ask(query)
+
+        print("\nANSWER:\n")
+
+        print(answer)
+
+        print("\n" + "=" * 100)
 
     finally:
         rag.close()

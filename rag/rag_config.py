@@ -1,53 +1,26 @@
 import uuid
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import Any
 
 
 @dataclass
 class RAGResponse:
     """
     Response object returned by RAG pipeline.
-
-    Attributes:
-        answer (str): Generated answer from LLM.
-        sources (List[Dict]): Retrieved source chunks with metadata.
     """
 
     answer: str
     sources: list[dict]
+
 
 @dataclass
 class ChunkMetadata:
     """
     Metadata container for a RAG chunk.
 
-    This structure is used across:
-    - ingestion pipeline
-    - vector storage (Qdrant)
-    - retrieval filtering
-    - reranking and evaluation
-
-    Attributes:
-        source (str):
-            Logical source of the document (e.g. "Civil Code RF").
-
-    file (str):
-        File path or identifier of the original document.
-
-    header (str | None):
-        Section or subsection title extracted from Markdown.
-
-    level (int | None):
-        Markdown heading level (1–6), representing hierarchy depth.
-
-    article_number (str | None):
-        Legal article identifier (e.g. "307").
-
-    chunk_index (int):
-        Sequential index of chunk within the document.
-
-    topics (List[str]):
-        Semantic tags used for hybrid retrieval and filtering.
+    The metadata is intentionally rich because it is used not only for
+    traceability, but also for metadata-aware hybrid retrieval and graph
+    expansion.
     """
 
     source: str
@@ -56,27 +29,26 @@ class ChunkMetadata:
     level: int | None
     article_number: str | None
     chunk_index: int | None = None
+
     topics: list[str] = field(default_factory=list)
+    keywords: list[str] = field(default_factory=list)
+    related_articles: list[str] = field(default_factory=list)
+
+    chapter: str | None = None
+    paragraph: str | None = None
+    legal_domain: str | None = None
+    article_title: str | None = None
+
+    graph_rag: dict[str, Any] = field(default_factory=dict)
+    classic_rag: dict[str, Any] = field(default_factory=dict)
+
+    context_summary: str | None = None
 
 
 @dataclass
 class Chunk:
     """
-    Represents a single text chunk in the RAG pipeline.
-
-    A Chunk is the основной unit of indexing and retrieval in the system.
-    It combines raw text with metadata and a deterministic identifier.
-
-    Attributes:
-        text (str):
-            Raw text content of the chunk.
-
-        metadata (ChunkMetadata):
-            Structured metadata used for filtering, ranking and traceability.
-
-        chunk_id (str | None):
-            Stable unique identifier for the chunk.
-            If not provided, it is deterministically generated in __post_init__.
+    Single text chunk used for indexing, retrieval and generation.
     """
 
     text: str
@@ -93,18 +65,13 @@ class Chunk:
                 self.metadata.file or "",
                 str(self.metadata.article_number or ""),
                 str(self.metadata.header or ""),
-                self.text[:400]
+                self.text[:400],
             ])
-
             self.chunk_id = str(uuid.uuid5(uuid.NAMESPACE_URL, key))
-
 
     def to_payload(self) -> dict[str, Any]:
         """
-        Converts chunk into a flat dictionary for vector DB storage.
-
-        Returns:
-            dict[str, Any]: Serializable representation of chunk.
+        Convert chunk to a Qdrant-compatible payload.
         """
 
         return {
@@ -114,5 +81,15 @@ class Chunk:
             "header": self.metadata.header,
             "level": self.metadata.level,
             "article_number": self.metadata.article_number,
+            "chunk_index": self.metadata.chunk_index,
             "topics": self.metadata.topics,
+            "keywords": self.metadata.keywords,
+            "related_articles": self.metadata.related_articles,
+            "chapter": self.metadata.chapter,
+            "paragraph": self.metadata.paragraph,
+            "legal_domain": self.metadata.legal_domain,
+            "article_title": self.metadata.article_title,
+            "graph_rag": self.metadata.graph_rag,
+            "classic_rag": self.metadata.classic_rag,
+            "context_summary": self.metadata.context_summary,
         }
