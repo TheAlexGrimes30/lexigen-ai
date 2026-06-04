@@ -6,27 +6,27 @@
         "metric_policy": "article_level_metrics are primary because the dataset is labeled by legal article ids."
     },
     "retrieval_metrics": {
-        "precision@5": 0.34,
-        "recall@5": 0.9167,
+        "precision@5": 0.35,
+        "recall@5": 0.9333,
         "hitrate@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.9312,
+        "ndcg@5": 0.9465,
         "hard_negative_rate@5": 0.02
     },
     "article_level_metrics": {
-        "precision@5": 0.34,
-        "recall@5": 0.9167,
+        "precision@5": 0.35,
+        "recall@5": 0.9333,
         "hitrate@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.9312,
+        "ndcg@5": 0.9465,
         "hard_negative_rate@5": 0.02
     },
     "chunk_order_article_metrics": {
-        "precision@5": 0.53,
-        "recall@5": 0.9167,
+        "precision@5": 0.54,
+        "recall@5": 0.9333,
         "hitrate@5": 1.0,
         "mrr": 1.0,
-        "ndcg@5": 0.9244,
+        "ndcg@5": 0.9372,
         "hard_negative_rate@5": 0.03
     },
     "category_metrics": {
@@ -51,7 +51,7 @@
             "recall@5": 0.8889,
             "hitrate@5": 1.0,
             "mrr": 1.0,
-            "ndcg@5": 0.8809,
+            "ndcg@5": 0.895,
             "hard_negative_rate@5": 0.0667
         },
         "enforcement": {
@@ -71,11 +71,11 @@
             "hard_negative_rate@5": 0.0
         },
         "contracts": {
-            "precision@5": 0.32,
-            "recall@5": 0.8833,
+            "precision@5": 0.36,
+            "recall@5": 0.95,
             "hitrate@5": 1.0,
             "mrr": 1.0,
-            "ndcg@5": 0.9072,
+            "ndcg@5": 0.9599,
             "hard_negative_rate@5": 0.0
         },
         "auctions": {
@@ -158,7 +158,7 @@
                 {
                     "rank": 1,
                     "article": "307",
-                    "score": 0.8124,
+                    "score": 0.8113,
                     "sources": [
                         "dense",
                         "graph"
@@ -267,7 +267,7 @@
                 {
                     "rank": 2,
                     "article": "307",
-                    "score": 0.4018,
+                    "score": 0.3568,
                     "sources": [
                         "bm25",
                         "dense",
@@ -399,7 +399,7 @@
                 {
                     "rank": 5,
                     "article": "309",
-                    "score": 0.2046,
+                    "score": 0.1934,
                     "sources": [
                         "bm25",
                         "dense",
@@ -424,14 +424,14 @@
             ],
             "retrieved_articles": [
                 "399",
-                "400",
+                "429.4",
                 "322",
                 "307.1"
             ],
             "retrieved_articles_chunk_order": [
                 "399",
                 "399",
-                "400",
+                "429.4",
                 "322",
                 "307.1"
             ],
@@ -475,14 +475,13 @@
                 },
                 {
                     "rank": 3,
-                    "article": "400",
-                    "score": 0.1998,
+                    "article": "429.4",
+                    "score": 0.2048,
                     "sources": [
-                        "dense",
-                        "graph"
+                        "dense"
                     ],
-                    "header": "Ничтожность соглашения об ограничении ответственности",
-                    "text": "[Статья 400 | Ничтожность соглашения об ограничении ответственности | Темы: civil_law, consumer_protection, contract_limitations, damages, enforcement, liability_limitation, obligations] Соглашение об ограничении ответственности является **ничтожным**, если одновременно выполняются условия: - оно заключено: - в договоре присоединения; - или в ином договоре с гражданином-потребителем; - и при этом: - закон устанавливает размер ответственности для данного обязательства; - соглашение заключено **до наступления обстоятельств**, вызывающих ответственность."
+                    "header": "Понятие абонентского договора",
+                    "text": "[Статья 429.4 | Понятие абонентского договора | Темы: civil_law, contracts, obligations, on_demand_performance, periodic_payments, service_contracts, subscription_contract] Абонентский договор — это соглашение, по которому: - одна сторона (абонент) вносит плату; - другая сторона (исполнитель) предоставляет возможность требовать исполнение."
                 },
                 {
                     "rank": 4,
@@ -520,15 +519,15 @@
             ],
             "retrieved_articles": [
                 "399",
-                "398",
                 "313",
+                "398",
                 "406"
             ],
             "retrieved_articles_chunk_order": [
                 "399",
                 "399",
-                "398",
                 "313",
+                "398",
                 "406"
             ],
             "article_level_metrics": {
@@ -572,17 +571,6 @@
                 },
                 {
                     "rank": 3,
-                    "article": "398",
-                    "score": 0.1611,
-                    "sources": [
-                        "bm25",
-                        "graph"
-                    ],
-                    "header": "Общие последствия неисполнения",
-                    "text": "[Статья 398 | Общие последствия неисполнения | Темы: civil_law, creditor_rights, damages, debtor_duties, enforcement, individual_item, obligations, performance_in_kind] Если должник не исполнил обязательство по передаче индивидуально-определённой вещи: - в собственность; - в хозяйственное ведение; - в оперативное управление; - в возмездное пользование; кредитор получает специальные способы защиты."
-                },
-                {
-                    "rank": 4,
                     "article": "313",
                     "score": 0.1431,
                     "sources": [
@@ -591,6 +579,17 @@
                     ],
                     "header": "Когда кредитор обязан принять исполнение",
                     "text": "[Статья 313 | Когда кредитор обязан принять исполнение | Темы: civil_law, contract_law, creditor_rights, obligations, subrogation, third_party_execution] Кредитор обязан принять исполнение от третьего лица, если: 1. Должник воз"
+                },
+                {
+                    "rank": 4,
+                    "article": "398",
+                    "score": 0.1161,
+                    "sources": [
+                        "bm25",
+                        "graph"
+                    ],
+                    "header": "Общие последствия неисполнения",
+                    "text": "[Статья 398 | Общие последствия неисполнения | Темы: civil_law, creditor_rights, damages, debtor_duties, enforcement, individual_item, obligations, performance_in_kind] Если должник не исполнил обязательство по передаче индивидуально-определённой вещи: - в собственность; - в хозяйственное ведение; - в оперативное управление; - в возмездное пользование; кредитор получает специальные способы защиты."
                 },
                 {
                     "rank": 5,
@@ -621,14 +620,14 @@
                 "413",
                 "325",
                 "308",
-                "407"
+                "403"
             ],
             "retrieved_articles_chunk_order": [
                 "413",
                 "413",
                 "325",
                 "308",
-                "407"
+                "403"
             ],
             "article_level_metrics": {
                 "precision@5": 0.2,
@@ -691,13 +690,14 @@
                 },
                 {
                     "rank": 5,
-                    "article": "407",
-                    "score": 0.1151,
+                    "article": "403",
+                    "score": 0.1103,
                     "sources": [
-                        "graph"
+                        "bm25",
+                        "dense"
                     ],
-                    "header": "Основания прекращения обязательств",
-                    "text": "[Статья 407 | Основания прекращения обязательств | Темы: agreement_of_parties, civil_law, contract_law, discharge, legal_basis, obligations, termination | Ключевые слова: договорное прекращение, законные основания, одностороннее прекращение, прекращение обязательства, соглашение сторон]"
+                    "header": "Суть нормы",
+                    "text": "[Статья 403 | Суть нормы | Темы: civil_law, debtor_responsibility, liability, obligations, performance_of_obligations, third_party_execution] - Если должник привлек третье лицо к исполнению обязательства: - действия этого лица считаются юридически связанными с должником; - кредитор предъявляет требования **к должнику**, а не к третьему лицу."
                 }
             ]
         },
@@ -752,7 +752,7 @@
                 {
                     "rank": 1,
                     "article": "407",
-                    "score": 0.6235,
+                    "score": 0.6213,
                     "sources": [
                         "bm25",
                         "dense",
@@ -797,7 +797,7 @@
                 {
                     "rank": 5,
                     "article": "416",
-                    "score": 0.343,
+                    "score": 0.3402,
                     "sources": [
                         "bm25",
                         "dense",
@@ -852,7 +852,7 @@
                 {
                     "rank": 1,
                     "article": "438",
-                    "score": 0.8162,
+                    "score": 0.8143,
                     "sources": [
                         "bm25",
                         "dense",
@@ -864,7 +864,7 @@
                 {
                     "rank": 2,
                     "article": "435",
-                    "score": 0.4078,
+                    "score": 0.3853,
                     "sources": [
                         "bm25",
                         "dense",
@@ -876,7 +876,7 @@
                 {
                     "rank": 3,
                     "article": "438",
-                    "score": 0.3535,
+                    "score": 0.352,
                     "sources": [
                         "dense",
                         "graph"
@@ -887,7 +887,7 @@
                 {
                     "rank": 4,
                     "article": "435",
-                    "score": 0.3243,
+                    "score": 0.2793,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1051,7 +1051,7 @@
                 {
                     "rank": 1,
                     "article": "438",
-                    "score": 0.6178,
+                    "score": 0.6165,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1063,7 +1063,7 @@
                 {
                     "rank": 2,
                     "article": "438",
-                    "score": 0.3608,
+                    "score": 0.3593,
                     "sources": [
                         "dense",
                         "graph"
@@ -1162,7 +1162,7 @@
                 {
                     "rank": 2,
                     "article": "447",
-                    "score": 0.4882,
+                    "score": 0.4857,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1174,7 +1174,7 @@
                 {
                     "rank": 3,
                     "article": "449",
-                    "score": 0.4081,
+                    "score": 0.4061,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1186,7 +1186,7 @@
                 {
                     "rank": 4,
                     "article": "448",
-                    "score": 0.2527,
+                    "score": 0.2077,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1198,7 +1198,7 @@
                 {
                     "rank": 5,
                     "article": "447",
-                    "score": 0.2053,
+                    "score": 0.2024,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1278,7 +1278,7 @@
                 {
                     "rank": 3,
                     "article": "449",
-                    "score": 0.2848,
+                    "score": 0.2827,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1301,7 +1301,7 @@
                 {
                     "rank": 5,
                     "article": "448",
-                    "score": 0.243,
+                    "score": 0.2265,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1370,7 +1370,7 @@
                 {
                     "rank": 2,
                     "article": "450",
-                    "score": 0.4809,
+                    "score": 0.4134,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1382,7 +1382,7 @@
                 {
                     "rank": 3,
                     "article": "450",
-                    "score": 0.424,
+                    "score": 0.409,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1429,14 +1429,15 @@
             "retrieved_articles": [
                 "452",
                 "453",
-                "450"
+                "450",
+                "451"
             ],
             "retrieved_articles_chunk_order": [
                 "452",
                 "452",
                 "453",
                 "450",
-                "450"
+                "451"
             ],
             "article_level_metrics": {
                 "precision@5": 0.2,
@@ -1490,7 +1491,7 @@
                 {
                     "rank": 4,
                     "article": "450",
-                    "score": 0.2332,
+                    "score": 0.2182,
                     "sources": [
                         "dense",
                         "graph"
@@ -1500,15 +1501,15 @@
                 },
                 {
                     "rank": 5,
-                    "article": "450",
-                    "score": 0.2191,
+                    "article": "451",
+                    "score": 0.1995,
                     "sources": [
                         "bm25",
                         "dense",
                         "graph"
                     ],
-                    "header": "1. Соглашение сторон",
-                    "text": "Соглашение сторон | Темы: breach_of_contract, business_contracts, civil_law, contract_modification, contract_termination, contracts, good_faith, judicial_procedure] Договор может быть изменён или расторгнут: - по соглашению сторон; - если иное не предусмотрено законом или самим договором. Для многосторонних предпринимательских договоров возможно:"
+                    "header": "4. Последствия расторжения",
+                    "text": "Последствия расторжения | Темы: changed_circumstances, civil_law, contract_modification, contract_termination, contracts, good_faith, judicial_procedure, risk_allocation] При расторжении договора суд: - определяет последствия; - распределяет расходы между сторонами; - руководствуется принципом справедливости."
                 }
             ]
         },
@@ -1569,7 +1570,7 @@
                 {
                     "rank": 2,
                     "article": "322",
-                    "score": 0.5489,
+                    "score": 0.5264,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1581,7 +1582,7 @@
                 {
                     "rank": 3,
                     "article": "322",
-                    "score": 0.408,
+                    "score": 0.3967,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1630,15 +1631,15 @@
             "retrieved_articles": [
                 "323",
                 "326",
-                "324",
                 "322",
+                "324",
                 "325"
             ],
             "retrieved_articles_chunk_order": [
                 "323",
                 "326",
-                "324",
                 "322",
+                "324",
                 "325"
             ],
             "article_level_metrics": {
@@ -1646,7 +1647,7 @@
                 "recall@5": 1.0,
                 "hitrate@5": 1.0,
                 "mrr": 1.0,
-                "ndcg@5": 0.8772153153380493,
+                "ndcg@5": 0.9197207891481876,
                 "hard_negative_rate@5": 0.0
             },
             "chunk_order_article_metrics": {
@@ -1654,7 +1655,7 @@
                 "recall@5": 1.0,
                 "hitrate@5": 1.0,
                 "mrr": 1.0,
-                "ndcg@5": 0.8772153153380493,
+                "ndcg@5": 0.9197207891481876,
                 "hard_negative_rate@5": 0.0
             },
             "retrieved_chunks": [
@@ -1683,6 +1684,18 @@
                 },
                 {
                     "rank": 3,
+                    "article": "322",
+                    "score": 0.3848,
+                    "sources": [
+                        "bm25",
+                        "dense",
+                        "graph"
+                    ],
+                    "header": "Особенности регулирования",
+                    "text": "[Статья 322 | Особенности регулирования | Темы: civil_law, contract_law, creditor_rights, debtor_duties, joint_and_several_liability, obligations, solidarity] - Солидарные обязательства означают: - кредитор вправе требовать исполнения как от всех должников совместно, так и от любого из них в полном объеме; - исполнение одним должником прекращает обязательство для остальных в соответствующей части."
+                },
+                {
+                    "rank": 4,
                     "article": "324",
                     "score": 0.2953,
                     "sources": [
@@ -1691,17 +1704,6 @@
                     ],
                     "header": "Ограничение возражений солидарного должника",
                     "text": "[Статья 324 | Ограничение возражений солидарного должника | Темы: civil_law, creditor_rights, debtor_defenses, enforcement, joint_and_several_liability, obligations, solidarity] Солидарный должник не вправе ссылаться на возражения против требований кредитора, если они основаны на: - отношениях других солидарных должников с кредитором; - при условии, что сам должник в этих отношениях не участвует."
-                },
-                {
-                    "rank": 4,
-                    "article": "322",
-                    "score": 0.2779,
-                    "sources": [
-                        "dense",
-                        "graph"
-                    ],
-                    "header": "Солидарные кредиторы",
-                    "text": "[Статья 322 | Солидарные кредиторы | Темы: civil_law, contract_law, creditor_rights, debtor_duties, joint_and_several_liability, obligations, solidarity] Если в обязательстве участвуют несколько кредиторов: - их требования могут быть **солидарными**; - если иное не предусмотрено: - законом; - или договором."
                 },
                 {
                     "rank": 5,
@@ -1774,25 +1776,24 @@
                 {
                     "rank": 2,
                     "article": "322",
-                    "score": 0.2464,
-                    "sources": [
-                        "bm25",
-                        "dense",
-                        "graph"
-                    ],
-                    "header": "Возникновение солидарности",
-                    "text": "[Статья 322 | Возникновение солидарности | Темы: civil_law, contract_law, creditor_rights, debtor_duties, joint_and_several_liability, obligations, solidarity] Солидарная обязанность или требование возникает: - если это прямо предусмотрено договором; - либо установлено законом. Также солидарность"
-                },
-                {
-                    "rank": 3,
-                    "article": "322",
-                    "score": 0.2149,
+                    "score": 0.2036,
                     "sources": [
                         "dense",
                         "graph"
                     ],
                     "header": "Особенности регулирования",
                     "text": "[Статья 322 | Особенности регулирования | Темы: civil_law, contract_law, creditor_rights, debtor_duties, joint_and_several_liability, obligations, solidarity] - Солидарные обязательства означают: - кредитор вправе требовать исполнения как от всех должников совместно, так и от любого из них в полном объеме; - исполнение одним должником прекращает обязательство для остальных в соответствующей части."
+                },
+                {
+                    "rank": 3,
+                    "article": "322",
+                    "score": 0.1579,
+                    "sources": [
+                        "dense",
+                        "graph"
+                    ],
+                    "header": "Солидарные должники",
+                    "text": "[Статья 322 | Солидарные должники | Темы: civil_law, contract_law, creditor_rights, debtor_duties, joint_and_several_liability, obligations, solidarity] Если несколько должников участвуют в обязательстве: - их обязанности являются **солидарными**, если: - это предусмотрено законом; - или договором; - либо следует из существа обязательства. - В предпринимательских отноше"
                 },
                 {
                     "rank": 4,
@@ -1833,37 +1834,38 @@
             ],
             "retrieved_articles": [
                 "435",
+                "438",
                 "432",
-                "438"
+                "440"
             ],
             "retrieved_articles_chunk_order": [
                 "435",
                 "435",
-                "432",
                 "438",
-                "432"
+                "432",
+                "440"
             ],
             "article_level_metrics": {
-                "precision@5": 0.4,
-                "recall@5": 0.6666666666666666,
+                "precision@5": 0.6,
+                "recall@5": 1.0,
                 "hitrate@5": 1.0,
                 "mrr": 1.0,
-                "ndcg@5": 0.7039180890341347,
+                "ndcg@5": 0.9674679834891693,
                 "hard_negative_rate@5": 0.0
             },
             "chunk_order_article_metrics": {
-                "precision@5": 0.6,
-                "recall@5": 0.6666666666666666,
+                "precision@5": 0.8,
+                "recall@5": 1.0,
                 "hitrate@5": 1.0,
                 "mrr": 1.0,
-                "ndcg@5": 0.6713860725233041,
+                "ndcg@5": 0.8854598815714874,
                 "hard_negative_rate@5": 0.0
             },
             "retrieved_chunks": [
                 {
                     "rank": 1,
                     "article": "435",
-                    "score": 0.6395,
+                    "score": 0.6363,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1875,7 +1877,7 @@
                 {
                     "rank": 2,
                     "article": "435",
-                    "score": 0.4618,
+                    "score": 0.4592,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1886,20 +1888,8 @@
                 },
                 {
                     "rank": 3,
-                    "article": "432",
-                    "score": 0.3197,
-                    "sources": [
-                        "bm25",
-                        "dense",
-                        "graph"
-                    ],
-                    "header": "Основные положения о заключении договора",
-                    "text": "[Статья 432 | Основные положения о заключении договора | Темы: civil_law, contract_formation, contracts, essential_terms, good_faith_principle, obligations, offer_and_acceptance | Ключевые слова: добросовестность, заключение договора, незаключенный договор, оферта и акцепт, существенные условия]"
-                },
-                {
-                    "rank": 4,
                     "article": "438",
-                    "score": 0.3,
+                    "score": 0.2965,
                     "sources": [
                         "bm25",
                         "dense",
@@ -1909,15 +1899,27 @@
                     "text": "Такие действия признаются акцептом, если: - они совершены в срок, установленный для акцепта; - они соответствуют условиям оферты; - иное не предусмотрено законом, офертой или соглашением сторон."
                 },
                 {
-                    "rank": 5,
+                    "rank": 4,
                     "article": "432",
-                    "score": 0.2706,
+                    "score": 0.2747,
                     "sources": [
                         "bm25",
+                        "dense",
                         "graph"
                     ],
-                    "header": "Условия заключения договора",
-                    "text": "[Статья 432 | Основные положения о заключении договора | Условия заключения договора | Темы: civil_law, contract_formation, contracts, essential_terms, good_faith_principle, obligations, offer_and_acceptance | Ключевые слова: добросовестность, заключение договора, незаключенный договор, оферта и акцепт, существенные условия] Договор считается заключенным, если: - между сторонами достигнуто соглашение; - соблюдена требуемая законом форма (если она обязательна); - согласованы все **существенные условия договора**."
+                    "header": "Основные положения о заключении договора",
+                    "text": "[Статья 432 | Основные положения о заключении договора | Темы: civil_law, contract_formation, contracts, essential_terms, good_faith_principle, obligations, offer_and_acceptance | Ключевые слова: добросовестность, заключение договора, незаключенный договор, оферта и акцепт, существенные условия]"
+                },
+                {
+                    "rank": 5,
+                    "article": "440",
+                    "score": 0.2647,
+                    "sources": [
+                        "bm25",
+                        "dense"
+                    ],
+                    "header": "Заключение договора на основании оферты, определяющей срок для акцепта",
+                    "text": "[Статья 440 | Заключение договора на основании оферты, определяющей срок для акцепта | Темы: acceptance, civil_law, contract_formation, contracts, deadlines, offer, timing_rules]"
                 }
             ]
         },
@@ -2074,7 +2076,7 @@
                 {
                     "rank": 2,
                     "article": "432",
-                    "score": 0.5782,
+                    "score": 0.567,
                     "sources": [
                         "bm25",
                         "dense",
@@ -2086,7 +2088,7 @@
                 {
                     "rank": 3,
                     "article": "432",
-                    "score": 0.4185,
+                    "score": 0.3735,
                     "sources": [
                         "bm25",
                         "dense",

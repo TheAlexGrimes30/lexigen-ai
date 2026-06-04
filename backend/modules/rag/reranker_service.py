@@ -1,7 +1,11 @@
-import math
-import re
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from functools import lru_cache
+from typing import List, Tuple
+
+import math
+import re
 
 from sentence_transformers import CrossEncoder
 
@@ -267,7 +271,7 @@ class Reranker(BaseReranker):
                 reverse=True
             )[:top_n]
 
-        scored_hits: list[SearchResult] = []
+        scored_hits: List[SearchResult] = []
 
         for hit, raw_score in zip(
             valid_hits,
@@ -362,34 +366,38 @@ class Reranker(BaseReranker):
 
         payload = doc.payload or {}
 
-        article = payload.get(
-            "article_number",
-            ""
-        )
+        article = payload.get("article_number", "")
+        header = payload.get("header", "")
+        article_title = payload.get("article_title", "")
+        legal_domain = payload.get("legal_domain", "")
+        chapter = payload.get("chapter", "")
+        paragraph = payload.get("paragraph", "")
+        topics = ", ".join(str(x) for x in (payload.get("topics") or []))
+        keywords = ", ".join(str(x) for x in (payload.get("keywords") or []))
+        related_articles = ", ".join(str(x) for x in (payload.get("related_articles") or []))
+        graph_relation_type = payload.get("graph_relation_type", "")
+        context_summary = payload.get("context_summary", "")
 
-        header = payload.get(
-            "header",
-            ""
-        )
-
-        text = self._prepare_text(
-            doc.text
-        )
+        text = self._prepare_text(doc.text)
 
         enriched = f"""
         Статья: {article}
-
-        Заголовок:
-        {header}
+        Название статьи: {article_title}
+        Заголовок чанка: {header}
+        Правовая область: {legal_domain}
+        Раздел/глава: {chapter}
+        Параграф: {paragraph}
+        Темы: {topics}
+        Ключевые слова: {keywords}
+        Связанные статьи: {related_articles}
+        Тип графовой связи: {graph_relation_type}
+        Краткий контекст: {context_summary}
 
         Текст:
         {text}
         """.strip()
 
-        return (
-            query.strip(),
-            enriched
-        )
+        return query.strip(), enriched
 
 
     def _prepare_text(

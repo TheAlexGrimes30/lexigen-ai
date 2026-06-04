@@ -6,6 +6,13 @@ from llama_cpp import Llama
 from backend.modules.rag.search_result_service import SearchResult
 
 
+INVALID_QUERY_MESSAGE = (
+    "Введите корректный юридический вопрос. "
+    "Например: «Что такое акцепт оферты?», «Можно ли работать с 14 лет?», "
+    "«Какие риски есть при кредите для ООО?»"
+)
+
+
 class BaseLLMClient(ABC):
 
     @abstractmethod
@@ -24,6 +31,20 @@ class BaseContextCleaner(ABC):
 
     @abstractmethod
     def clean_context(self, text: str) -> str:
+        raise NotImplementedError
+
+
+class BaseQueryValidator(ABC):
+    """
+    Interface for validating user queries before retrieval/generation.
+    """
+
+    @abstractmethod
+    def validate(self, query: str) -> tuple[bool, str | None]:
+        """
+        Validate query and return (is_valid, error_message).
+        """
+
         raise NotImplementedError
 
 
@@ -47,6 +68,144 @@ class ContextCleaner(BaseContextCleaner):
         text = re.sub(r"\n{3,}", "\n\n", text)
         text = re.sub(r"[ \t]+", " ", text)
         return text.strip()
+
+
+class LegalQueryValidator(BaseQueryValidator):
+    """
+    Lightweight guard against random/gibberish queries.
+
+    The validator is intentionally conservative:
+    - it rejects obvious garbage such as "frfref", "asdfgh", "???";
+    - it allows normal Russian legal questions;
+    - it allows short legal terms such as "акцепт", "договор", "статья 438";
+    - it does not call external services and does not affect valid legal requests.
+    """
+
+    MIN_MEANINGFUL_CHARS = 3
+
+    LEGAL_HINT_PATTERN = re.compile(
+        r"(?iu)\b("
+        r"гк|тк|коап|ук|рф|ст|статья|стать[ьяеию]+|"
+        r"договор|оферта|акцепт|кредит|займ|ооо|ип|предпринимател|"
+        r"должник|кредитор|обязательств|ответственност|суд|иск|"
+        r"торг|аукцион|расторжен|изменен|изменён|штраф|убытк|"
+        r"работ|труд|зарплат|отпуск|увольнен|несовершеннолет"
+        r")\b"
+    )
+
+    ARTICLE_REFERENCE_PATTERN = re.compile(
+        r"(?iu)\b(ст\.?|статья|article)\s*\d+(?:\.\d+)?\b|\b\d{2,4}(?:\.\d+)?\s*(гк|тк|коап|ук)\b"
+    )
+
+    VOWELS = set("аеёиоуыэюяaeiou")
+
+    KEYBOARD_GIBBERISH_PATTERNS = (
+        re.compile(r"(?i)^(asdf+|qwerty+|zxcv+|йцукен+|фыва+)$"),
+        re.compile(r"(?i)^[a-z]{4,12}$"),
+    )
+
+    def validate(self, query: str) -> tuple[bool, str | None]:
+        """
+        Validate user query before LLM generation.
+        """
+
+        normalized = self._normalize(query)
+
+        if not normalized:
+            return False, INVALID_QUERY_MESSAGE
+
+        if self._is_article_reference(normalized):
+            return True, None
+
+        if self._has_legal_hint(normalized):
+            return True, None
+
+        if self._looks_like_question(normalized) and not self._looks_like_gibberish(normalized):
+            return True, None
+
+        return False, INVALID_QUERY_MESSAGE
+
+    @staticmethod
+    def _normalize(query: str) -> str:
+        """
+        Normalize whitespace and strip technical noise.
+        """
+
+        query = str(query or "")
+        query = re.sub(r"\s+", " ", query).strip()
+        return query
+
+    def _is_article_reference(self, query: str) -> bool:
+        """
+        Allow direct legal article queries such as "статья 438".
+        """
+
+        return bool(self.ARTICLE_REFERENCE_PATTERN.search(query))
+
+    def _has_legal_hint(self, query: str) -> bool:
+        """
+        Detect legal-domain words that make even a short query meaningful.
+        """
+
+        return bool(self.LEGAL_HINT_PATTERN.search(query))
+
+    def _looks_like_question(self, query: str) -> bool:
+        """
+        Detect a natural language question without requiring legal keywords.
+        """
+
+        letters = re.findall(r"[а-яА-ЯёЁa-zA-Z]", query)
+        words = re.findall(r"[а-яА-ЯёЁa-zA-Z0-9_.-]+", query)
+
+        if len(letters) < self.MIN_MEANINGFUL_CHARS:
+            return False
+
+        if len(words) >= 3:
+            return True
+
+        return query.endswith("?") and len(words) >= 2
+
+    def _looks_like_gibberish(self, query: str) -> bool:
+        """
+        Reject obvious random input while keeping meaningful Russian words.
+        """
+
+        compact = re.sub(r"[^а-яА-ЯёЁa-zA-Z0-9]", "", query).lower()
+        words = re.findall(r"[а-яА-ЯёЁa-zA-Z]+", query.lower())
+
+        if not compact:
+            return True
+
+        if len(words) == 1:
+            word = words[0]
+            latin_only = bool(re.fullmatch(r"[a-z]+", word))
+
+            if latin_only and not self._has_legal_hint(word):
+                return True
+
+            if len(word) >= 5 and sum(ch in self.VOWELS for ch in word) == 0:
+                return True
+
+        for pattern in self.KEYBOARD_GIBBERISH_PATTERNS:
+            if pattern.fullmatch(compact):
+                return True
+
+        repeated_ratio = self._max_repeated_char_ratio(compact)
+        if len(compact) >= 5 and repeated_ratio >= 0.75:
+            return True
+
+        return False
+
+    @staticmethod
+    def _max_repeated_char_ratio(text: str) -> float:
+        """
+        Return max frequency ratio for one character.
+        """
+
+        if not text:
+            return 1.0
+
+        return max(text.count(char) for char in set(text)) / len(text)
 
 
 class QwenClient(BaseLLMClient):
@@ -149,12 +308,14 @@ class ContractRiskAnalysisPromptBuilder(BasePromptBuilder):
         ОТВЕТ:
         """.strip()
 
+
 class Generator(BaseGenerator):
 
-    def __init__(self, llm, prompt_builder, cleaner):
+    def __init__(self, llm, prompt_builder, cleaner, query_validator: BaseQueryValidator | None = None):
         self.llm = llm
         self.prompt_builder = prompt_builder
         self.cleaner = cleaner
+        self.query_validator = query_validator or LegalQueryValidator()
 
     def generate(
             self,
@@ -162,6 +323,10 @@ class Generator(BaseGenerator):
             context: str,
             hits: list[SearchResult]
     ) -> str:
+
+        is_valid, error_message = self.query_validator.validate(query)
+        if not is_valid:
+            return error_message or INVALID_QUERY_MESSAGE
 
         context = self.cleaner.clean_context(context or "")
 

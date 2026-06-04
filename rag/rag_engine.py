@@ -167,8 +167,6 @@ class RAG:
 
         print(f"Loaded chunks: {len(chunks)}")
 
-        # Dense vectors are stored in Qdrant, but BM25 and GraphRAG are in-memory.
-        # They must be rebuilt on every application start, even if Qdrant already has points.
         self.retriever.build_sparse_and_graph(chunks)
 
         self.index_if_needed(chunks)
