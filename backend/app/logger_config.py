@@ -6,6 +6,9 @@ os.makedirs("logs", exist_ok=True)
 def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
 
+    if logger.handlers:
+        return logger
+
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
