@@ -1,10 +1,13 @@
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.db import Chat, User, Message
+from backend.app.logger_config import get_logger
+from backend.db import User, Message, Chat
 from backend.modules.auth.interfaces import BaseAuthRepository
+
+logger = get_logger(__name__)
 
 
 class AuthRepository(BaseAuthRepository):
@@ -16,13 +19,36 @@ class AuthRepository(BaseAuthRepository):
         email: str,
     ) -> User | None:
         """Возвращает пользователя по нормализованному email."""
-        stmt = select(User).where(
-            User.email == email.lower()
+
+        normalized_email = email.lower()
+
+        logger.info(
+            "Fetching user by email: email=%s",
+            normalized_email,
         )
 
-        result = await db.execute(stmt)
+        try:
+            stmt = select(User).where(
+                User.email == normalized_email
+            )
 
-        return result.scalar_one_or_none()
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+
+            logger.info(
+                "User by email fetched: email=%s, found=%s",
+                normalized_email,
+                user is not None,
+            )
+
+            return user
+
+        except Exception:
+            logger.exception(
+                "Failed to fetch user by email: email=%s",
+                normalized_email,
+            )
+            raise
 
     async def get_user_by_id(
         self,
@@ -30,13 +56,34 @@ class AuthRepository(BaseAuthRepository):
         user_id: UUID,
     ) -> User | None:
         """Возвращает пользователя по UUID."""
-        stmt = select(User).where(
-            User.id == user_id
+
+        logger.info(
+            "Fetching user by id: user_id=%s",
+            user_id,
         )
 
-        result = await db.execute(stmt)
+        try:
+            stmt = select(User).where(
+                User.id == user_id
+            )
 
-        return result.scalar_one_or_none()
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
+
+            logger.info(
+                "User by id fetched: user_id=%s, found=%s",
+                user_id,
+                user is not None,
+            )
+
+            return user
+
+        except Exception:
+            logger.exception(
+                "Failed to fetch user by id: user_id=%s",
+                user_id,
+            )
+            raise
 
     async def add_user(
         self,
@@ -44,12 +91,33 @@ class AuthRepository(BaseAuthRepository):
         user: User,
     ) -> User:
         """Добавляет пользователя и фиксирует транзакцию."""
-        db.add(user)
 
-        await db.commit()
-        await db.refresh(user)
+        logger.info(
+            "Adding user: email=%s, role=%s",
+            user.email,
+            user.role.value,
+        )
 
-        return user
+        try:
+            db.add(user)
+
+            await db.commit()
+            await db.refresh(user)
+
+            logger.info(
+                "User added successfully: user_id=%s, email=%s",
+                user.id,
+                user.email,
+            )
+
+            return user
+
+        except Exception:
+            logger.exception(
+                "Failed to add user: email=%s",
+                user.email,
+            )
+            raise
 
     async def save_user(
         self,
@@ -57,23 +125,57 @@ class AuthRepository(BaseAuthRepository):
         user: User,
     ) -> User:
         """Фиксирует изменения пользователя и обновляет объект."""
-        await db.commit()
-        await db.refresh(user)
 
-        return user
+        logger.info(
+            "Saving user: user_id=%s",
+            user.id,
+        )
+
+        try:
+            await db.commit()
+            await db.refresh(user)
+
+            logger.info(
+                "User saved successfully: user_id=%s",
+                user.id,
+            )
+
+            return user
+
+        except Exception:
+            logger.exception(
+                "Failed to save user: user_id=%s",
+                user.id,
+            )
+            raise
 
     async def count_users(
         self,
         db: AsyncSession,
     ) -> int:
         """Возвращает количество пользователей."""
-        value = (
-            await db.execute(
-                select(func.count()).select_from(User)
-            )
-        ).scalar_one()
 
-        return int(value or 0)
+        logger.info("Counting users")
+
+        try:
+            value = (
+                await db.execute(
+                    select(func.count()).select_from(User)
+                )
+            ).scalar_one()
+
+            result = int(value or 0)
+
+            logger.info(
+                "Users counted: count=%s",
+                result,
+            )
+
+            return result
+
+        except Exception:
+            logger.exception("Failed to count users")
+            raise
 
     async def count_chats(
         self,
@@ -81,13 +183,27 @@ class AuthRepository(BaseAuthRepository):
     ) -> int:
         """Возвращает количество чатов."""
 
-        value = (
-            await db.execute(
-                select(func.count()).select_from(Chat)
-            )
-        ).scalar_one()
+        logger.info("Counting chats")
 
-        return int(value or 0)
+        try:
+            value = (
+                await db.execute(
+                    select(func.count()).select_from(Chat)
+                )
+            ).scalar_one()
+
+            result = int(value or 0)
+
+            logger.info(
+                "Chats counted: count=%s",
+                result,
+            )
+
+            return result
+
+        except Exception:
+            logger.exception("Failed to count chats")
+            raise
 
     async def count_messages(
         self,
@@ -95,10 +211,24 @@ class AuthRepository(BaseAuthRepository):
     ) -> int:
         """Возвращает количество сообщений."""
 
-        value = (
-            await db.execute(
-                select(func.count()).select_from(Message)
-            )
-        ).scalar_one()
+        logger.info("Counting messages")
 
-        return int(value or 0)
+        try:
+            value = (
+                await db.execute(
+                    select(func.count()).select_from(Message)
+                )
+            ).scalar_one()
+
+            result = int(value or 0)
+
+            logger.info(
+                "Messages counted: count=%s",
+                result,
+            )
+
+            return result
+
+        except Exception:
+            logger.exception("Failed to count messages")
+            raise

@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.logger_config import get_logger
 from backend.db.messages import Message
 from backend.db.users import User
 from backend.modules.chats.service import chats_service
@@ -22,6 +23,8 @@ from backend.modules.messages.repository import MessagesRepository
 from backend.modules.messages.schema import MessageResponse
 from backend.parsers.document_parser import ContractDocumentParser
 
+logger = get_logger(__name__)
+
 
 class MessagesService(BaseMessagesService):
     """Сервис сообщений чата с поддержкой анализа DOCX/PDF без сохранения файла на диск."""
@@ -33,8 +36,7 @@ class MessagesService(BaseMessagesService):
         dialog_handler: DialogTurnHandler,
         document_handler: DocumentAnalysisHandler,
         document_policy: BaseDocumentAnalysisPolicy,
-    ) -> None:
-        """Инициализирует сервис сообщений."""
+    ):
         self.repository = repository
         self.mapper = mapper
         self.dialog_handler = dialog_handler
@@ -47,6 +49,9 @@ class MessagesService(BaseMessagesService):
         chat_id: UUID,
     ) -> list[Message]:
         """Возвращает список сообщений чата."""
+
+        logger.info("Listing messages: chat_id=%s", chat_id)
+
         return await self.repository.list_by_chat(
             db=db,
             chat_id=chat_id,
@@ -61,6 +66,14 @@ class MessagesService(BaseMessagesService):
         current_user: User,
     ) -> list[MessageResponse]:
         """Создаёт пару сообщений пользователя и системы или ассистента."""
+
+        logger.info(
+            "Message turn creation requested: chat_id=%s, user_id=%s, has_file=%s",
+            chat_id,
+            current_user.id,
+            file is not None,
+        )
+
         chat = await chats_service.get_chat(
             db,
             chat_id,
@@ -68,6 +81,12 @@ class MessagesService(BaseMessagesService):
         )
 
         if not chat:
+            logger.warning(
+                "Message turn creation rejected: chat not found: chat_id=%s, user_id=%s",
+                chat_id,
+                current_user.id,
+            )
+
             raise HTTPException(
                 status_code=404,
                 detail="Чат не найден",
@@ -90,6 +109,12 @@ class MessagesService(BaseMessagesService):
             user_text = (content or "").strip()
 
             if not user_text:
+                logger.warning(
+                    "Message turn creation rejected: empty content: chat_id=%s, user_id=%s",
+                    chat_id,
+                    current_user.id,
+                )
+
                 raise HTTPException(
                     status_code=400,
                     detail="Сообщение не может быть пустым",
@@ -101,6 +126,12 @@ class MessagesService(BaseMessagesService):
                 user_id=chat.user_id,
                 user_text=user_text,
             )
+
+        logger.info(
+            "Message turn created successfully: chat_id=%s, user_id=%s",
+            chat_id,
+            current_user.id,
+        )
 
         return self.mapper.to_response_list(
             [
@@ -117,6 +148,13 @@ class MessagesService(BaseMessagesService):
         user_text: str,
     ) -> tuple[Message, Message]:
         """Создаёт обычный диалоговый turn без файла."""
+
+        logger.info(
+            "Creating dialog turn: chat_id=%s, user_id=%s",
+            chat_id,
+            user_id,
+        )
+
         return await self.dialog_handler.create_turn(
             db=db,
             chat_id=chat_id,
@@ -133,6 +171,14 @@ class MessagesService(BaseMessagesService):
         file: UploadFile,
     ) -> tuple[Message, Message]:
         """Создаёт turn анализа документа."""
+
+        logger.info(
+            "Creating document analysis turn: chat_id=%s, user_id=%s, filename=%s",
+            chat_id,
+            user_id,
+            file.filename,
+        )
+
         return await self.document_handler.create_turn(
             db=db,
             chat_id=chat_id,
@@ -148,6 +194,13 @@ class MessagesService(BaseMessagesService):
         current_user: User,
     ) -> list[MessageResponse]:
         """Возвращает DTO списка сообщений чата текущего пользователя."""
+
+        logger.info(
+            "Messages response requested: chat_id=%s, user_id=%s",
+            chat_id,
+            current_user.id,
+        )
+
         chat = await chats_service.get_chat(
             db,
             chat_id,
@@ -155,6 +208,12 @@ class MessagesService(BaseMessagesService):
         )
 
         if not chat:
+            logger.warning(
+                "Messages response rejected: chat not found: chat_id=%s, user_id=%s",
+                chat_id,
+                current_user.id,
+            )
+
             raise HTTPException(
                 status_code=404,
                 detail="Чат не найден",
@@ -163,6 +222,13 @@ class MessagesService(BaseMessagesService):
         messages = await self.list_messages(
             db=db,
             chat_id=chat_id,
+        )
+
+        logger.info(
+            "Messages response prepared: chat_id=%s, user_id=%s, count=%s",
+            chat_id,
+            current_user.id,
+            len(messages),
         )
 
         return self.mapper.to_response_list(messages)
@@ -175,6 +241,13 @@ class MessagesService(BaseMessagesService):
         current_user: User,
     ) -> MessageResponse:
         """Создаёт системное сообщение об ошибке."""
+
+        logger.warning(
+            "System error message creation requested: chat_id=%s, user_id=%s",
+            chat_id,
+            current_user.id,
+        )
+
         chat = await chats_service.get_chat(
             db,
             chat_id,
@@ -182,6 +255,12 @@ class MessagesService(BaseMessagesService):
         )
 
         if not chat:
+            logger.warning(
+                "System error message rejected: chat not found: chat_id=%s, user_id=%s",
+                chat_id,
+                current_user.id,
+            )
+
             raise HTTPException(
                 status_code=404,
                 detail="Чат не найден",
@@ -204,6 +283,12 @@ class MessagesService(BaseMessagesService):
             entities=[system_message],
         )
 
+        logger.warning(
+            "System error message created: chat_id=%s, user_id=%s",
+            chat_id,
+            current_user.id,
+        )
+
         return self.mapper.to_response(system_message)
 
     async def _ensure_document_analysis_allowed(
@@ -212,6 +297,12 @@ class MessagesService(BaseMessagesService):
         current_user: User,
     ) -> None:
         """Проверяет право пользователя на анализ документа."""
+
+        logger.info(
+            "Checking document analysis permission through service: user_id=%s",
+            current_user.id,
+        )
+
         await self.document_policy.ensure_allowed(
             db=db,
             current_user=current_user,
@@ -222,6 +313,12 @@ class MessagesService(BaseMessagesService):
         file: UploadFile,
     ) -> None:
         """Проверяет расширение документа."""
+
+        logger.info(
+            "Validating document through service: filename=%s",
+            file.filename,
+        )
+
         self.document_handler.validator.validate(file)
 
 
