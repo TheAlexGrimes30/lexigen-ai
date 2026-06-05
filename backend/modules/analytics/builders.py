@@ -2,8 +2,10 @@ from io import BytesIO
 
 from docx import Document
 
+from backend.app.logger_config import get_logger
 from backend.modules.analytics.interfaces import BaseAnalysisReportBuilder
 
+logger = get_logger(__name__)
 
 class DocxAnalysisReportBuilder(BaseAnalysisReportBuilder):
     """Генератор DOCX-отчёта результата анализа."""
@@ -13,23 +15,37 @@ class DocxAnalysisReportBuilder(BaseAnalysisReportBuilder):
         text: str,
     ) -> BytesIO:
         """Создаёт DOCX-файл из текста результата анализа."""
-        buffer = BytesIO()
 
-        document = Document()
+        logger.info("DOCX analysis report building started")
 
-        document.add_heading(
-            "Результат анализа договора",
-            level=1,
-        )
+        try:
+            buffer = BytesIO()
+            document = Document()
 
-        for line in text.splitlines():
-            clean_line = line.strip()
+            document.add_heading(
+                "Результат анализа договора",
+                level=1,
+            )
 
-            if clean_line:
-                document.add_paragraph(clean_line)
+            paragraphs_count = 0
 
-        document.save(buffer)
+            for line in text.splitlines():
+                clean_line = line.strip()
 
-        buffer.seek(0)
+                if clean_line:
+                    document.add_paragraph(clean_line)
+                    paragraphs_count += 1
 
-        return buffer
+            document.save(buffer)
+            buffer.seek(0)
+
+            logger.info(
+                "DOCX analysis report built successfully: paragraphs=%s",
+                paragraphs_count,
+            )
+
+            return buffer
+
+        except Exception:
+            logger.exception("Failed to build DOCX analysis report")
+            raise
