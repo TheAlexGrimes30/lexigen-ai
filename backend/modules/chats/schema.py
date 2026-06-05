@@ -19,12 +19,12 @@ class ChatUpdateRequest(BaseModel):
 class ChatResponse(BaseModel):
     """DTO ответа с данными чата."""
 
-    model_config = ConfigDict(
-        from_attributes=True,
-    )
-
     id: UUID
     user_id: UUID
     title: str
     created_at: datetime
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
 
