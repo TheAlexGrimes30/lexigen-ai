@@ -1,7 +1,7 @@
 import uuid
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine, AsyncSession
 
 from backend.db import Base, Subscription, SubscriptionPlan, User, UserRole
 from backend.modules.admin.repository import AdminAnalyticsRepository
@@ -17,11 +17,11 @@ class FakeAdminAnalyticsRepository:
         self.count_users_called = False
         self.count_users_by_active_subscription_called = False
 
-    async def count_users(self, db):
+    async def count_users(self, db: AsyncSession):
         self.count_users_called = True
         return self.total_users
 
-    async def count_users_by_active_subscription(self, db):
+    async def count_users_by_active_subscription(self, db: AsyncSession):
         self.count_users_by_active_subscription_called = True
         return self.rows
 

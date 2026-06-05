@@ -1,6 +1,7 @@
 import pytest
 from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.db.database import get_db
 from backend.modules.admin.router import router
@@ -10,7 +11,7 @@ from backend.modules.auth.dependencies import get_admin_user
 class FakeAdminService:
     """Fake service for admin analytics API tests."""
 
-    async def get_users_by_subscription_analytics(self, db):
+    async def get_users_by_subscription_analytics(self, db: AsyncSession) -> dict[str, int | dict[str, int]]:
         return {
             "total_users": 10,
             "without_subscription": 4,
@@ -25,7 +26,7 @@ class FakeAdminService:
 class EmptyAdminService:
     """Fake service that returns empty analytics."""
 
-    async def get_users_by_subscription_analytics(self, db):
+    async def get_users_by_subscription_analytics(self, db: AsyncSession) -> dict[str, int | dict[str, int]]:
         return {
             "total_users": 0,
             "without_subscription": 0,
@@ -62,6 +63,11 @@ def build_test_app(monkeypatch, service=None, admin_allowed: bool = True) -> Fas
 
 @pytest.mark.asyncio
 async def test_get_admin_analytics_returns_subscription_stats(monkeypatch):
+    """
+    Verifies that the analytics endpoint returns
+    subscription statistics for an administrator.
+    """
+
     app = build_test_app(monkeypatch)
 
     async with AsyncClient(
@@ -84,6 +90,11 @@ async def test_get_admin_analytics_returns_subscription_stats(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_admin_analytics_response_contains_required_fields(monkeypatch):
+    """
+    Verifies that the analytics response contains
+    all required top-level fields.
+    """
+
     app = build_test_app(monkeypatch)
 
     async with AsyncClient(
@@ -104,6 +115,8 @@ async def test_get_admin_analytics_response_contains_required_fields(monkeypatch
 
 @pytest.mark.asyncio
 async def test_get_admin_analytics_returns_zeroes(monkeypatch):
+    """Returns empty analytics statistics when no data exists."""
+
     app = build_test_app(monkeypatch, service=EmptyAdminService())
 
     async with AsyncClient(
@@ -126,6 +139,8 @@ async def test_get_admin_analytics_returns_zeroes(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_admin_analytics_requires_admin(monkeypatch):
+    """Returns HTTP 403 when the current user is not an administrator."""
+
     app = build_test_app(monkeypatch, admin_allowed=False)
 
     async with AsyncClient(
@@ -140,6 +155,8 @@ async def test_get_admin_analytics_requires_admin(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_admin_analytics_uses_response_model(monkeypatch):
+    """Ensures that the response fields have the expected data types."""
+
     app = build_test_app(monkeypatch)
 
     async with AsyncClient(
