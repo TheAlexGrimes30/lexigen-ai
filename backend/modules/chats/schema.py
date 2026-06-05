@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class ChatCreateRequest(BaseModel):
@@ -19,12 +19,12 @@ class ChatUpdateRequest(BaseModel):
 class ChatResponse(BaseModel):
     """DTO ответа с данными чата."""
 
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
+
     id: UUID
     user_id: UUID
     title: str
     created_at: datetime
 
-    class Config:
-        """Конфигурация Pydantic-схемы чата."""
-
-        from_attributes = True
