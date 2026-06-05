@@ -283,7 +283,7 @@ class AuthService(BaseAuthService):
         user: User,
     ) -> AuthUserResponse:
         """Преобразует ORM-пользователя в DTO ответа."""
-        
+
         return AuthUserResponse(
             id=user.id,
             name=user.name,
