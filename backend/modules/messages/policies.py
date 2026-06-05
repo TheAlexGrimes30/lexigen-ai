@@ -1,6 +1,7 @@
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.app.logger_config import get_logger
 from backend.db.enums import UserRole
 from backend.db.users import User
 from backend.modules.messages.interfaces import (
@@ -9,6 +10,8 @@ from backend.modules.messages.interfaces import (
 )
 from backend.modules.subscriptions.service import subscriptions_service
 
+logger = get_logger(__name__)
+
 
 class DocumentAnalysisPolicy(BaseDocumentAnalysisPolicy):
     """Политика ограничения анализа документов по роли и подписке."""
@@ -16,8 +19,7 @@ class DocumentAnalysisPolicy(BaseDocumentAnalysisPolicy):
     def __init__(
         self,
         repository: BaseMessagesRepository,
-    ) -> None:
-        """Инициализирует политику анализа документов."""
+    ):
         self.repository = repository
 
     async def ensure_allowed(
@@ -26,7 +28,18 @@ class DocumentAnalysisPolicy(BaseDocumentAnalysisPolicy):
         current_user: User,
     ) -> None:
         """Проверяет право пользователя анализировать документ."""
+
+        logger.info(
+            "Checking document analysis permission: user_id=%s, role=%s",
+            current_user.id,
+            current_user.role.value,
+        )
+
         if current_user.role == UserRole.admin:
+            logger.info(
+                "Document analysis allowed for admin: user_id=%s",
+                current_user.id,
+            )
             return
 
         has_subscription = await subscriptions_service.user_has_paid_subscription(
@@ -35,6 +48,10 @@ class DocumentAnalysisPolicy(BaseDocumentAnalysisPolicy):
         )
 
         if has_subscription:
+            logger.info(
+                "Document analysis allowed by paid subscription: user_id=%s",
+                current_user.id,
+            )
             return
 
         used_uploads = await self.repository.count_user_documents(
@@ -43,6 +60,12 @@ class DocumentAnalysisPolicy(BaseDocumentAnalysisPolicy):
         )
 
         if used_uploads >= 1:
+            logger.warning(
+                "Document analysis denied: free upload limit reached: user_id=%s, used_uploads=%s",
+                current_user.id,
+                used_uploads,
+            )
+
             raise HTTPException(
                 status_code=403,
                 detail=(
@@ -50,3 +73,9 @@ class DocumentAnalysisPolicy(BaseDocumentAnalysisPolicy):
                     "Оформите Basic, Pro или Enterprise в личном кабинете."
                 ),
             )
+
+        logger.info(
+            "Document analysis allowed by free upload limit: user_id=%s, used_uploads=%s",
+            current_user.id,
+            used_uploads,
+        )
