@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class MessageResponse(BaseModel):
@@ -16,7 +16,6 @@ class MessageResponse(BaseModel):
     chat_document_id: UUID | None = None
     analysis_result_id: UUID | None = None
 
-    class Config:
-        """Конфигурация Pydantic-схемы сообщения."""
-
-        from_attributes = True
+    model_config = ConfigDict(
+        from_attributes=True,
+    )

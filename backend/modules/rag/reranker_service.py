@@ -13,17 +13,7 @@ from backend.modules.rag.search_result_service import SearchResult
 
 
 class BaseReranker(ABC):
-    """
-    Abstract base interface for reranking systems.
-
-    A reranker receives:
-    - user query
-    - retrieved search results
-
-    and returns:
-    - reordered search results ranked by relevance.
-    """
-
+    """Abstract base interface for reranking systems."""
 
     @abstractmethod
     def rerank(
@@ -90,52 +80,6 @@ class Reranker(BaseReranker):
 
         max_chunks_per_article: int = 3,
     ):
-        """
-        Initialize reranker.
-
-        Args:
-            model_name (str):
-                HuggingFace CrossEncoder model name.
-
-            batch_size (int):
-                Batch size for inference.
-
-            max_length (int):
-                Maximum token length for model input.
-
-            top_n (int):
-                Default number of returned results.
-
-            rerank_weight (float):
-                Weight of CrossEncoder rerank score.
-
-            dense_weight (float):
-                Weight of dense retriever similarity score.
-
-            lexical_weight (float):
-                Weight of lexical overlap score.
-
-            exact_header_boost (float):
-                Boost for exact header match.
-
-            partial_header_boost (float):
-                Boost for partial header match.
-
-            definition_boost (float):
-                Additional boost for definitional chunks.
-
-            generic_header_penalty (float):
-                Penalty for generic headers.
-
-            low_lexical_penalty (float):
-                Penalty for low lexical overlap.
-
-            max_chunks_per_article (int):
-                Maximum chunks allowed from same article.
-
-        Returns:
-            None
-        """
 
         self.model = self._load(
             model_name=model_name,
@@ -167,20 +111,7 @@ class Reranker(BaseReranker):
         model_name: str,
         max_length: int
     ) -> CrossEncoder:
-        """
-        Load CrossEncoder model with caching.
-
-        Args:
-            model_name (str):
-                HuggingFace model identifier.
-
-            max_length (int):
-                Maximum sequence length.
-
-        Returns:
-            CrossEncoder:
-                Loaded reranker model.
-        """
+        """Load CrossEncoder model with caching."""
 
         model = CrossEncoder(
             model_name,
@@ -205,29 +136,7 @@ class Reranker(BaseReranker):
         hits: list[SearchResult],
         top_n: int | None = None
     ) -> list[SearchResult]:
-        """
-        Perform hybrid reranking.
-
-        Combines:
-        - semantic reranking
-        - dense score
-        - lexical similarity
-        - heuristic boosts and penalties
-
-        Args:
-            query (str):
-                User search query.
-
-            hits (List[SearchResult]):
-                Retrieved search results.
-
-            top_n (int | None):
-                Number of results to return.
-
-        Returns:
-            List[SearchResult]:
-                Final reranked search results.
-        """
+        """Perform hybrid reranking."""
 
         if not hits:
             return []
@@ -349,20 +258,7 @@ class Reranker(BaseReranker):
         query: str,
         doc: SearchResult
     ) -> tuple[str, str]:
-        """
-        Build query-document pair for CrossEncoder.
-
-        Args:
-            query (str):
-                User query.
-
-            doc (SearchResult):
-                Retrieved document chunk.
-
-        Returns:
-            Tuple[str, str]:
-                Pair of query and enriched document text.
-        """
+        """Build query-document pair for CrossEncoder."""
 
         payload = doc.payload or {}
 
@@ -404,17 +300,7 @@ class Reranker(BaseReranker):
         self,
         text: str
     ) -> str:
-        """
-        Prepare and truncate text for reranking.
-
-        Args:
-            text (str):
-                Raw chunk text.
-
-        Returns:
-            str:
-                Cleaned and truncated text.
-        """
+        """Prepare and truncate text for reranking."""
 
         text = (text or "").strip()
 
@@ -437,17 +323,7 @@ class Reranker(BaseReranker):
         self,
         score: float
     ) -> float:
-        """
-        Normalize CrossEncoder logit score.
-
-        Args:
-            score (float):
-                Raw model output.
-
-        Returns:
-            float:
-                Normalized semantic relevance score.
-        """
+        """Normalize CrossEncoder logit score."""
 
         score = float(score)
 
@@ -460,17 +336,7 @@ class Reranker(BaseReranker):
         self,
         score: float
     ) -> float:
-        """
-        Normalize dense retriever similarity score.
-
-        Args:
-            score (float):
-                Raw dense retriever score.
-
-        Returns:
-            float:
-                Clamped similarity score in range [0, 1].
-        """
+        """Normalize dense retriever similarity score."""
 
         return max(
             0.0,
@@ -482,17 +348,7 @@ class Reranker(BaseReranker):
         self,
         text: str
     ) -> list[str]:
-        """
-        Tokenize text into normalized words.
-
-        Args:
-            text (str):
-                Input text.
-
-        Returns:
-            List[str]:
-                List of normalized tokens.
-        """
+        """Tokenize text into normalized words."""
 
         return [
             w for w in re.findall(
@@ -508,20 +364,7 @@ class Reranker(BaseReranker):
         query: str,
         text: str
     ) -> float:
-        """
-        Compute lexical overlap score.
-
-        Args:
-            query (str):
-                User query.
-
-            text (str):
-                Document text.
-
-        Returns:
-            float:
-                Lexical similarity score.
-        """
+        """Compute lexical overlap score."""
 
         query_words = set(
             self._tokenize(query)
@@ -549,20 +392,7 @@ class Reranker(BaseReranker):
         query: str,
         header: str
     ) -> float:
-        """
-        Compute header relevance boost.
-
-        Args:
-            query (str):
-                User query.
-
-            header (str):
-                Chunk header.
-
-        Returns:
-            float:
-                Header relevance score.
-        """
+        """Compute header relevance boost."""
 
         q = query.lower().strip()
         h = (header or "").lower().strip()
@@ -605,23 +435,7 @@ class Reranker(BaseReranker):
         text: str,
         header: str
     ) -> float:
-        """
-        Boost definition-oriented chunks.
-
-        Args:
-            query (str):
-                User query.
-
-            text (str):
-                Chunk text.
-
-            header (str):
-                Chunk header.
-
-        Returns:
-            float:
-                Definition relevance boost.
-        """
+        """Boost definition-oriented chunks."""
 
         query_lower = query.lower()
 
@@ -670,23 +484,7 @@ class Reranker(BaseReranker):
         header: str,
         text: str
     ) -> float:
-        """
-        Compute heuristic penalties.
-
-        Args:
-            query (str):
-                User query.
-
-            header (str):
-                Chunk header.
-
-            text (str):
-                Chunk text.
-
-        Returns:
-            float:
-                Penalty value.
-        """
+        """Compute heuristic penalties."""
 
         penalty = 0.0
 
@@ -723,21 +521,7 @@ class Reranker(BaseReranker):
         hits: list[SearchResult],
         top_n: int
     ) -> list[SearchResult]:
-        """
-        Diversify final results by limiting chunks
-        from the same article.
-
-        Args:
-            hits (List[SearchResult]):
-                Ranked search results.
-
-            top_n (int):
-                Maximum number of returned results.
-
-        Returns:
-            List[SearchResult]:
-                Diversified search results.
-        """
+        """Diversify final results by limiting chunks from the same article."""
 
         selected = []
 
@@ -770,73 +554,3 @@ class Reranker(BaseReranker):
                 break
 
         return selected
-
-    def debug_rerank(
-        self,
-        query: str,
-        hits: list[SearchResult],
-        top_n: int = 10
-    ) -> None:
-        """
-        Print detailed reranking debug information.
-
-        Args:
-            query (str):
-                User query.
-
-            hits (List[SearchResult]):
-                Retrieved search results.
-
-            top_n (int):
-                Number of debug results to display.
-
-        Returns:
-            None
-        """
-
-        print("\n" + "=" * 100)
-
-        print("[RERANK DEBUG]")
-
-        print(f"QUERY: {query}")
-
-        print("=" * 100)
-
-        ranked = self.rerank(
-            query=query,
-            hits=hits,
-            top_n=top_n
-        )
-
-        for idx, hit in enumerate(
-            ranked,
-            start=1
-        ):
-
-            payload = hit.payload or {}
-
-            print(f"\n[{idx}]")
-
-            print(
-                f"SCORE   : "
-                f"{hit.score:.4f}"
-            )
-
-            print(
-                f"ARTICLE : "
-                f"{payload.get('article_number')}"
-            )
-
-            print(
-                f"HEADER  : "
-                f"{payload.get('header')}"
-            )
-
-            print("\nTEXT:")
-            print("-" * 80)
-
-            print(
-                (hit.text or "")[:1000]
-            )
-
-            print("-" * 80)
