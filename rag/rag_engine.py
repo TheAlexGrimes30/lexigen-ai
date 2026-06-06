@@ -7,7 +7,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance
 
 from rag.dense_retriever import (
-    Embedder
+    Embedder, Retriever
 )
 
 from rag.generator import (
@@ -16,7 +16,6 @@ from rag.generator import (
     LaborPromptBuilder,
     QwenClient
 )
-from rag.hybrid_retriever import Retriever
 
 from rag.rag_service import (
     RAGService
@@ -109,7 +108,7 @@ class RAG:
 
         self.vector_store = VectorStore(
             client=self.qdrant,
-            collection_name="credit_graph_collection",
+            collection_name="credit_collection",
             vector_size=self.embedder.dim,
             distance=Distance.COSINE
         )
@@ -167,7 +166,7 @@ class RAG:
 
         print(f"Loaded chunks: {len(chunks)}")
 
-        self.retriever.build_sparse_and_graph(chunks)
+        #self.retriever.build_sparse_and_graph(chunks)
 
         self.index_if_needed(chunks)
 
@@ -457,7 +456,7 @@ if __name__ == "__main__":
         evaluate_rag(
             rag,
             dataset,
-            output_path="rag_eval_results_hybrid_5.json",
+            output_path="rag_eval_results_dense_100.json",
             use_reranker=True,
             retrieve_top_k=20,
             rerank_top_n=5

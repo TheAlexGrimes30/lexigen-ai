@@ -1,15 +1,7 @@
 from fastapi import APIRouter
-from pydantic import Field, BaseModel
 
+from backend.modules.rag.schemas import RAGQueryResponse, RAGQueryRequest
 from backend.modules.rag.service import rag_app_service
-
-
-class RAGQueryRequest(BaseModel):
-    query: str = Field(min_length=1)
-
-
-class RAGQueryResponse(BaseModel):
-    answer: str
 
 
 router = APIRouter(prefix="/api/rag", tags=["rag"])
