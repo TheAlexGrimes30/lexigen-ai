@@ -456,7 +456,7 @@ if __name__ == "__main__":
         evaluate_rag(
             rag,
             dataset,
-            output_path="rag_eval_results_dense.json",
+            output_path="rag_eval_results_dense_100.json",
             use_reranker=True,
             retrieve_top_k=20,
             rerank_top_n=5
