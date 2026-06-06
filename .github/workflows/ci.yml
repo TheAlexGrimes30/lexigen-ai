@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  docker-ci:
+    name: Build and test Docker project
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          cat > .env <<EOF
+          DB_NAME=lexigen
+          DB_USER=postgres
+          DB_PASS=postgres
+          DB_HOST=postgres
+          DB_PORT=5432
+
+          QDRANT_HOST=qdrant
+          QDRANT_PORT=6333
+
+          JWT_SECRET=test_secret_key
+          JWT_EXPIRES_MINUTES=1440
+          ADMIN_EMAIL=admin@lexigen.local
+
+          RAG_COLLECTION=credit_graph_collection
+          LLM_MODEL_PATH=/app/models/model.gguf
+          EMBEDDER_MODEL_PATH=/app/models/Qwen3-Embedding-0.6B
+          RERANKER_MODEL_PATH=/app/models/bge-reranker-v2-m3
+          EOF
+
+      - name: Create required folders
+        run: |
+          mkdir -p qdrant_storage
+          mkdir -p models
+          mkdir -p rag_db
+
+      - name: Build Docker images
+        run: docker compose build
+
+      - name: Start infrastructure
+        run: docker compose up -d postgres qdrant
+
+      - name: Run migrations
+        run: docker compose run --rm migrations
+
+      - name: Run tests
+        run: docker compose run --rm tests
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker compose logs postgres
+          docker compose logs qdrant
+          docker compose logs migrations
+          docker compose logs backend
+
+      - name: Shutdown containers
+        if: always()
+        run: docker compose down
