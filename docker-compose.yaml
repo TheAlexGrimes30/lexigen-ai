@@ -1,0 +1,122 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: lexigen_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: lexigen_qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+
+  migrations:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: lexigen_migrations
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app/backend
+      - ./alembic.ini:/app/alembic.ini
+      - ./migrations:/app/migrations
+    command: alembic upgrade head
+    restart: "no"
+
+  tests:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: lexigen_tests
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      migrations:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    volumes:
+      - ./backend:/app/backend
+      - ./tests:/app/tests
+      - ./models:/app/models
+      - ./rag_db:/app/rag_db
+      - ./alembic.ini:/app/alembic.ini
+      - ./pytest.ini:/app/pytest.ini
+      - ./migrations:/app/migrations
+    command: pytest
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: lexigen_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      migrations:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app/backend
+      - ./models:/app/models
+      - ./rag_db:/app/rag_db
+      - ./tests:/app/tests
+      - ./alembic.ini:/app/alembic.ini
+      - ./pytest.ini:/app/pytest.ini
+      - ./migrations:/app/migrations
+    command: >
+      uvicorn backend.app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: lexigen_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  postgres_data:
+  frontend_node_modules:

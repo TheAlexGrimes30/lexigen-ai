@@ -3,6 +3,7 @@ from pathlib import Path
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance
 
+from backend.app.config import settings
 from backend.modules.rag.chuncking import HybridLegalChunker
 from backend.modules.rag.generator import ContextCleaner, CreditPromptBuilder, QwenClient, Generator
 from backend.modules.rag.index_service import IndexService
@@ -50,8 +51,8 @@ class RAG:
         )
 
         self.qdrant = QdrantClient(
-            "localhost",
-            port=6333,
+            host=settings.QDRANT_HOST,
+            port=settings.QDRANT_PORT,
         )
 
         self.vector_store = VectorStore(
