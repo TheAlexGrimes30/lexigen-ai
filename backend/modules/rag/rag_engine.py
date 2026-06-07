@@ -1,8 +1,11 @@
+import os
 from pathlib import Path
 
+from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance
 
+from backend.app.config import settings
 from backend.modules.rag.chuncking import HybridLegalChunker
 from backend.modules.rag.generator import ContextCleaner, CreditPromptBuilder, QwenClient, Generator
 from backend.modules.rag.index_service import IndexService
@@ -14,6 +17,7 @@ from backend.modules.rag.retriever_service import Retriever
 from backend.modules.rag.search_result_service import SearchResult
 from backend.modules.rag.storage import VectorStore
 
+load_dotenv()
 
 class RAG:
     """
@@ -50,8 +54,8 @@ class RAG:
         )
 
         self.qdrant = QdrantClient(
-            "localhost",
-            port=6333,
+            host=settings.QDRANT_HOST,
+            port=settings.QDRANT_PORT,
         )
 
         self.vector_store = VectorStore(

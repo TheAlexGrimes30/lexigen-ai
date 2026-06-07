@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     DB_HOST: str
     DB_PORT: int
 
+    QDRANT_HOST: str = "qdrant"
+    QDRANT_PORT: int = 6333
+
     JWT_SECRET: str = "change_me_very_secret_key"
     JWT_EXPIRES_MINUTES: int = 60 * 24
     ADMIN_EMAIL: str = "admin@lexigen.local"
