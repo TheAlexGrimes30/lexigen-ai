@@ -18,6 +18,8 @@ from backend.modules.subscriptions.router import router as subscriptions_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Manage application startup and shutdown lifecycle."""
+
     asyncio.create_task(rag_app_service.startup())
     yield
     await engine.dispose()
@@ -47,10 +49,14 @@ app.include_router(subscriptions_router)
 
 @app.get("/")
 async def root():
+    """Return the application status message."""
+
     return {"message": "LexigenAI backend is running"}
 
 @app.get("/health/db")
 async def health_db(db: AsyncSession = Depends(get_db)):
+    """Check database connectivity and availability."""
+
     result = await db.execute(text("SELECT 1"))
     return { "status": "ok", "db_response": result.scalar() }
 

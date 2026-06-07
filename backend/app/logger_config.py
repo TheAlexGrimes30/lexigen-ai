@@ -4,6 +4,8 @@ import os
 os.makedirs("logs", exist_ok=True)
 
 def get_logger(name: str) -> logging.Logger:
+    """Create and configure a logger with file and console handlers."""
+
     logger = logging.getLogger(name)
 
     if logger.handlers:
